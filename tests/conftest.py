@@ -137,6 +137,17 @@ def mock_client():
 
     client.run = _default_run
 
+    # llm-config
+    from teardrop_cli._fixtures import make_llm_config, make_benchmarks_response
+
+    client.get_llm_config = AsyncMock(return_value=make_llm_config())
+    client.set_llm_config = AsyncMock(return_value=make_llm_config())
+    client.delete_llm_config = AsyncMock(return_value={"status": "deleted"})
+
+    # models benchmarks
+    client.get_model_benchmarks = AsyncMock(return_value=make_benchmarks_response())
+    client.get_org_model_benchmarks = AsyncMock(return_value=make_benchmarks_response())
+
     return client
 
 

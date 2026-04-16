@@ -19,8 +19,10 @@ from teardrop_cli._lazy import LazyGroup
     lazy_subcommands={
         "auth": "teardrop_cli.commands.auth:app",
         "agent": "teardrop_cli.commands.agent:app",
+        "llm-config": "teardrop_cli.commands.llm_config:app",
         "marketplace": "teardrop_cli.commands.marketplace:app",
         "mcp": "teardrop_cli.commands.mcp:app",
+        "models": "teardrop_cli.commands.models:app",
         "tools": "teardrop_cli.commands.tools:app",
     },
     context_settings={"help_option_names": ["-h", "--help"]},

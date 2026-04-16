@@ -154,6 +154,116 @@ teardrop tools test <tool-id> --input '{"param": "value"}'
 
 ---
 
+## LLM Configuration
+
+Configure organization-level LLM settings, including model selection, routing preference, and bring-your-own-key (BYOK) support.
+
+```bash
+# Get current config
+teardrop llm-config get org-1
+teardrop llm-config get org-1 --json
+
+# Set config with provider and model
+teardrop llm-config set org-1 \
+  --provider anthropic \
+  --model claude-haiku-4-5-20251001
+
+# Set with routing preference
+teardrop llm-config set org-1 \
+  --provider anthropic \
+  --model claude-haiku-4-5-20251001 \
+  --routing cost
+
+# Set advanced options
+teardrop llm-config set org-1 \
+  --provider openai \
+  --model gpt-4o \
+  --max-tokens 8000 \
+  --temperature 0.7 \
+  --timeout-seconds 60
+
+# Bring-your-own-key (BYOK)
+teardrop llm-config set org-1 \
+  --provider openai \
+  --model gpt-4o \
+  --byok-key $OPENAI_API_KEY
+
+# Read key from stdin (more secure)
+cat $key_file | teardrop llm-config set org-1 \
+  --provider openai \
+  --model gpt-4o \
+  --byok-key -
+
+# Self-hosted model
+teardrop llm-config set org-1 \
+  --provider openai \
+  --model llama2-70b \
+  --api-base https://gpu-cluster.internal.example.com:8000/v1 \
+  --byok-key $LOCAL_TOKEN
+
+# Rotate API key
+teardrop llm-config set org-1 \
+  --provider anthropic \
+  --model claude-sonnet-4-20250514 \
+  --rotate-key
+
+# Delete custom config (revert to global defaults)
+teardrop llm-config delete org-1
+teardrop llm-config delete org-1 --yes    # skip confirm
+```
+
+**Supported providers:** `anthropic`, `openai`, `google`
+
+**Routing preferences:** `default`, `cost`, `speed`, `quality`
+
+**Validation:**
+- Temperature: 0.0–2.0
+- Max tokens: 1–200,000
+- Timeout: ≥ 1 second
+- API key handling: keys sent only over TLS; warnings shown for insecure practices
+
+**Caching:**
+- Config is cached locally for 5 minutes; use `--no-cache` to force refresh
+
+---
+
+## Models & Benchmarks
+
+View the model catalogue with performance metrics and discover your organization's actual usage.
+
+```bash
+# Public model benchmarks (no auth required)
+teardrop models benchmarks
+teardrop models benchmarks --json
+
+# Organization-scoped metrics (auth required)
+teardrop models benchmarks --org org-1
+teardrop models benchmarks --org org-1 --json
+
+# Bypass cache
+teardrop models benchmarks --no-cache
+teardrop models benchmarks --org org-1 --force-refresh
+```
+
+The public benchmark table shows:
+- Model identifiers and display names
+- Quality tier (1–3)
+- P95 latency (ms)
+- Pricing (cost per 1k tokens in/out)
+- 7-day usage stats (total runs)
+
+Organization-scoped metrics show your org's actual performance:
+- Number of runs
+- Average latency
+- Average cost per run
+- Tokens per second
+
+**Caching:**
+- Public benchmarks: 10 minutes local cache
+- Organization benchmarks: always fresh (no cache)
+
+---
+
 ## Configuration
 
 The config file lives at the platform-appropriate path (e.g., `~/.config/teardrop/config.toml` on Linux/macOS). It is created automatically on first login and restricted to owner-read (`0o600` on POSIX).
