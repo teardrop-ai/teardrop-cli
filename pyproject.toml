@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "teardrop-cli"
+version = "0.1.0"
+description = "Command-line interface for the Teardrop AI agent platform"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "teardrop-ai" }]
+keywords = ["teardrop", "ai", "agent", "cli", "crypto"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "teardrop-sdk @ git+https://github.com/teardrop-ai/teardrop-sdk.git",
+    "typer>=0.12",
+    "rich>=13.0",
+    "platformdirs>=4.0",
+    "keyring>=25.0",
+    "eth-account>=0.13",
+    "tomli-w>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-mock>=3.14",
+    "ruff>=0.4",
+    "hatch>=1.12",
+]
+
+[project.scripts]
+teardrop = "teardrop_cli.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/teardrop-ai/teardrop-cli"
+Repository = "https://github.com/teardrop-ai/teardrop-cli"
+Issues = "https://github.com/teardrop-ai/teardrop-cli/issues"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/teardrop_cli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v"
+
+[tool.ruff]
+line-length = 99
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["teardrop_cli"]
