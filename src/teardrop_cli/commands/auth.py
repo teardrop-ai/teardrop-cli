@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Annotated, Optional
 
 import typer
@@ -45,7 +46,7 @@ def login(
     from teardrop import AsyncTeardropClient
 
     from teardrop_cli import config
-    from teardrop_cli.formatting import console, print_error, print_success, spinner
+    from teardrop_cli.formatting import print_success, spinner
 
     url = base_url or config.get_base_url()
 
@@ -109,8 +110,13 @@ def login(
     print_success(f"Authenticated as [bold]{me.sub}[/bold].")
 
 
+# ---------------------------------------------------------------------------
+# SIWE — private key (env var)
+# ---------------------------------------------------------------------------
+
+
 def _login_siwe(url: str) -> None:
-    """Interactive SIWE (Sign-In With Ethereum) login flow."""
+    """SIWE login using a private key supplied via TEARDROP_SIWE_PRIVATE_KEY."""
     import asyncio
 
     from teardrop import AsyncTeardropClient
@@ -118,10 +124,13 @@ def _login_siwe(url: str) -> None:
     from teardrop_cli import config
     from teardrop_cli.formatting import console, print_error, print_success, spinner
 
-    private_key = typer.prompt(
-        "Private key (hex, 0x-prefixed)",
-        hide_input=True,
-    )
+    private_key = os.environ.get("TEARDROP_SIWE_PRIVATE_KEY")
+    if not private_key:
+        print_error(
+            "TEARDROP_SIWE_PRIVATE_KEY environment variable is not set.",
+            hint="Export your Ethereum private key: export TEARDROP_SIWE_PRIVATE_KEY=0x<key>",
+        )
+        raise typer.Exit(1)
 
     try:
         from eth_account import Account
@@ -131,7 +140,7 @@ def _login_siwe(url: str) -> None:
             "eth-account is required for SIWE login.",
             hint="Install it with: pip install eth-account",
         )
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     account = Account.from_key(private_key)
     wallet_address = account.address
@@ -181,7 +190,7 @@ def _login_siwe(url: str) -> None:
 
 
 def _handle_auth_error(exc: Exception) -> None:
-    from teardrop import AuthenticationError, APIError
+    from teardrop import APIError, AuthenticationError
 
     from teardrop_cli.formatting import print_error
 

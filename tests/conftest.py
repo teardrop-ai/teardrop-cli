@@ -148,6 +148,14 @@ def mock_client():
     client.get_model_benchmarks = AsyncMock(return_value=make_benchmarks_response())
     client.get_org_model_benchmarks = AsyncMock(return_value=make_benchmarks_response())
 
+    # siwe wallet sessions
+    from teardrop_cli._fixtures import make_siwe_session
+
+    client.create_siwe_session = AsyncMock(return_value=make_siwe_session())
+    client.get_siwe_session = AsyncMock(
+        return_value=make_siwe_session(status="completed")
+    )
+
     return client
 
 

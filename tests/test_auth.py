@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-from typer.testing import CliRunner
+from click.testing import CliRunner
 
 from teardrop_cli.cli import app
 
@@ -99,6 +98,46 @@ class TestLogin:
 
         assert result.exit_code == 0, result.output
         assert stored["client_id"] == "cid_123"
+
+
+# ---------------------------------------------------------------------------
+# SIWE login
+# ---------------------------------------------------------------------------
+
+
+class TestSiweLogin:
+    """Tests for the SIWE private-key-from-environment login flow."""
+
+    def test_siwe_success(self, runner: CliRunner, monkeypatch):
+        """--siwe reads TEARDROP_SIWE_PRIVATE_KEY and stores the JWT."""
+        from eth_account import Account
+
+        stored = {}
+        monkeypatch.setattr(
+            "teardrop_cli.config.store_token",
+            lambda t: stored.update({"token": t}),
+        )
+        monkeypatch.setenv("TEARDROP_SIWE_PRIVATE_KEY", Account.create().key.hex())
+
+        mock_client = MagicMock()
+        mock_client.get_siwe_nonce = AsyncMock(return_value={"nonce": "abc123"})
+        mock_client.authenticate_siwe = AsyncMock(return_value="jwt.siwe.ok")
+        mock_client.close = AsyncMock()
+
+        with patch("teardrop.AsyncTeardropClient", return_value=mock_client):
+            result = runner.invoke(app, ["auth", "login", "--siwe"])
+
+        assert result.exit_code == 0, result.output
+        assert stored["token"] == "jwt.siwe.ok"
+
+    def test_siwe_missing_env(self, runner: CliRunner, monkeypatch):
+        """--siwe exits with code 1 when TEARDROP_SIWE_PRIVATE_KEY is not set."""
+        monkeypatch.delenv("TEARDROP_SIWE_PRIVATE_KEY", raising=False)
+
+        result = runner.invoke(app, ["auth", "login", "--siwe"])
+
+        assert result.exit_code == 1
+        assert "TEARDROP_SIWE_PRIVATE_KEY" in result.output
 
 
 # ---------------------------------------------------------------------------
