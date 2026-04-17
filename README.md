@@ -14,12 +14,14 @@ Command-line interface for the [Teardrop](https://teardrop.dev) crypto-native AI
 ## Installation
 
 ```bash
-git clone https://github.com/teardrop-ai/teardrop-cli
-cd teardrop-cli
-pip install -e .
+pip install teardrop-cli
 ```
 
-The entry point is `teardrop`.
+Verify the installation:
+
+```bash
+teardrop --version
+```
 
 ---
 
@@ -45,7 +47,8 @@ teardrop auth login --email user@example.com --secret ••••
 teardrop auth login --client-id <id> --client-secret <secret>
 
 # Sign-In With Ethereum (EIP-4361)
-teardrop auth login --siwe          # prompts for private key
+export TEARDROP_SIWE_PRIVATE_KEY=0x<private-key>
+teardrop auth login --siwe
 
 # Pre-issued JWT
 teardrop auth login --token <jwt>
@@ -279,15 +282,25 @@ base_url = "https://api.teardrop.dev"   # optional override
 
 ## Development
 
+To contribute to `teardrop-cli`, clone the repository and install in editable mode with dev dependencies:
+
 ```bash
-# Install with dev extras
+git clone https://github.com/teardrop-ai/teardrop-cli
+cd teardrop-cli
 pip install -e ".[dev]"
+```
 
-# Run tests
+Run tests:
+
+```bash
 pytest
+```
 
-# Lint
+Lint and format:
+
+```bash
 ruff check src tests
+ruff format src tests
 ```
 
 **Testing utilities** in `src/teardrop_cli/_fixtures.py`:
