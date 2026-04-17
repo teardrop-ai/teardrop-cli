@@ -31,11 +31,14 @@ def list_tools(
 
     client = config.get_client(base_url)
 
-    with spinner("Fetching tools…"):
+    async def _fetch():
         try:
-            tools = asyncio.run(client.list_tools())
+            return await client.list_tools()
         finally:
-            asyncio.run(client.close())
+            await client.close()
+
+    with spinner("Fetching tools…"):
+        tools = asyncio.run(_fetch())
 
     if as_json:
         print_json([t.model_dump() for t in tools])
@@ -94,11 +97,14 @@ def test_tool(
 
     client = config.get_client(base_url)
 
-    with spinner(f"Fetching tool [bold]{tool_id}[/bold]…"):
+    async def _fetch():
         try:
-            tool = asyncio.run(client.get_tool(tool_id))
+            return await client.get_tool(tool_id)
         finally:
-            asyncio.run(client.close())
+            await client.close()
+
+    with spinner(f"Fetching tool [bold]{tool_id}[/bold]…"):
+        tool = asyncio.run(_fetch())
 
     tool_data = tool.model_dump()
 

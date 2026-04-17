@@ -30,11 +30,14 @@ def list_servers(
 
     client = config.get_client(base_url)
 
-    with spinner("Fetching MCP servers…"):
+    async def _fetch():
         try:
-            servers = asyncio.run(client.list_mcp_servers())
+            return await client.list_mcp_servers()
         finally:
-            asyncio.run(client.close())
+            await client.close()
+
+    with spinner("Fetching MCP servers…"):
+        servers = asyncio.run(_fetch())
 
     if as_json:
         print_json([s.model_dump() for s in servers])
@@ -95,11 +98,14 @@ def add(
 
     client = config.get_client(base_url)
 
-    with spinner(f"Adding MCP server [bold]{name}[/bold]…"):
+    async def _fetch():
         try:
-            server = asyncio.run(client.create_mcp_server(CreateMcpServerRequest(**req_kwargs)))
+            return await client.create_mcp_server(CreateMcpServerRequest(**req_kwargs))
         finally:
-            asyncio.run(client.close())
+            await client.close()
+
+    with spinner(f"Adding MCP server [bold]{name}[/bold]…"):
+        server = asyncio.run(_fetch())
 
     if as_json:
         print_json(server.model_dump())
@@ -127,11 +133,14 @@ def discover(
 
     client = config.get_client(base_url)
 
-    with spinner(f"Discovering tools for [bold]{server_id}[/bold]…"):
+    async def _fetch():
         try:
-            result = asyncio.run(client.discover_mcp_server_tools(server_id))
+            return await client.discover_mcp_server_tools(server_id)
         finally:
-            asyncio.run(client.close())
+            await client.close()
+
+    with spinner(f"Discovering tools for [bold]{server_id}[/bold]…"):
+        result = asyncio.run(_fetch())
 
     tools = getattr(result, "tools", []) or []
 
@@ -184,10 +193,13 @@ def remove(
 
     client = config.get_client(base_url)
 
-    with spinner(f"Removing [bold]{server_id}[/bold]…"):
+    async def _fetch():
         try:
-            asyncio.run(client.delete_mcp_server(server_id))
+            await client.delete_mcp_server(server_id)
         finally:
-            asyncio.run(client.close())
+            await client.close()
+
+    with spinner(f"Removing [bold]{server_id}[/bold]…"):
+        asyncio.run(_fetch())
 
     print_success(f"MCP server [bold]{server_id}[/bold] removed.")

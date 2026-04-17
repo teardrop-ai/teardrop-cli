@@ -41,11 +41,14 @@ def get(
     client = config.get_client(base_url)
 
     try:
-        with spinner("Fetching LLM config…"):
+        async def _fetch():
             try:
-                cfg = asyncio.run(client.get_llm_config(org_id=org_id, no_cache=no_cache))
+                return await client.get_llm_config(org_id=org_id, no_cache=no_cache)
             finally:
-                asyncio.run(client.close())
+                await client.close()
+
+        with spinner("Fetching LLM config…"):
+            cfg = asyncio.run(_fetch())
     except AuthenticationError:
         print_error(
             "Not authenticated.",
@@ -221,11 +224,14 @@ def set_config(
         kwargs["api_key"] = resolved_key
 
     try:
-        with spinner("Updating LLM config…"):
+        async def _fetch():
             try:
-                cfg = asyncio.run(client.set_llm_config(**kwargs))
+                return await client.set_llm_config(**kwargs)
             finally:
-                asyncio.run(client.close())
+                await client.close()
+
+        with spinner("Updating LLM config…"):
+            cfg = asyncio.run(_fetch())
     except AuthenticationError:
         print_error("Not authenticated.", hint="Run: `teardrop auth login`")
         raise typer.Exit(1)
@@ -288,11 +294,14 @@ def delete(
     client = config.get_client(base_url)
 
     try:
-        with spinner("Deleting LLM config…"):
+        async def _fetch():
             try:
-                asyncio.run(client.delete_llm_config(org_id=org_id))
+                await client.delete_llm_config(org_id=org_id)
             finally:
-                asyncio.run(client.close())
+                await client.close()
+
+        with spinner("Deleting LLM config…"):
+            asyncio.run(_fetch())
     except AuthenticationError:
         print_error("Not authenticated.", hint="Run: `teardrop auth login`")
         raise typer.Exit(1)

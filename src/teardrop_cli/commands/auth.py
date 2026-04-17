@@ -74,15 +74,19 @@ def login(
         if not client_secret:
             client_secret = typer.prompt("Client secret", hide_input=True)
 
+        async def _fetch_client_creds():
+            try:
+                return await client.get_me()
+            finally:
+                await client.close()
+
         with spinner("Authenticating…"):
             client = AsyncTeardropClient(url, client_id=client_id, client_secret=client_secret)
             try:
-                me = asyncio.run(client.get_me())
+                me = asyncio.run(_fetch_client_creds())
             except Exception as exc:
                 _handle_auth_error(exc)
                 return
-            finally:
-                asyncio.run(client.close())
 
         config.store_client_credentials(client_id, client_secret)
         print_success(f"Authenticated as [bold]{me.sub}[/bold] (client credentials).")
@@ -96,15 +100,19 @@ def login(
     if not secret:
         secret = typer.prompt("Password", hide_input=True)
 
+    async def _fetch_email():
+        try:
+            return await client.get_me()
+        finally:
+            await client.close()
+
     with spinner("Authenticating…"):
         client = AsyncTeardropClient(url, email=email, secret=secret)
         try:
-            me = asyncio.run(client.get_me())
+            me = asyncio.run(_fetch_email())
         except Exception as exc:
             _handle_auth_error(exc)
             return
-        finally:
-            asyncio.run(client.close())
 
     config.store_email_credentials(email, secret)
     print_success(f"Authenticated as [bold]{me.sub}[/bold].")
@@ -153,10 +161,12 @@ def _login_siwe(url: str) -> None:
             nonce = nonce_resp.get("nonce", nonce_resp.get("value", ""))
 
             # Construct EIP-4361 message
+            from datetime import datetime, timezone
             from urllib.parse import urlparse
 
             parsed = urlparse(url)
             domain = parsed.netloc or parsed.path
+            issued_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             message = (
                 f"{domain} wants you to sign in with your Ethereum account:\n"
                 f"{wallet_address}\n\n"
@@ -164,7 +174,8 @@ def _login_siwe(url: str) -> None:
                 f"URI: {url}\n"
                 f"Version: 1\n"
                 f"Chain ID: 1\n"
-                f"Nonce: {nonce}"
+                f"Nonce: {nonce}\n"
+                f"Issued At: {issued_at}"
             )
 
             signable = encode_defunct(text=message)
@@ -238,11 +249,14 @@ def whoami(
 
     client = config.get_client(base_url)
 
-    with spinner("Fetching identity…"):
+    async def _fetch():
         try:
-            me = asyncio.run(client.get_me())
+            return await client.get_me()
         finally:
-            asyncio.run(client.close())
+            await client.close()
+
+    with spinner("Fetching identity…"):
+        me = asyncio.run(_fetch())
 
     data = me.model_dump()
     if as_json:

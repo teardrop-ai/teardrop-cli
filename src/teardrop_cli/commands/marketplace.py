@@ -28,13 +28,16 @@ def balance(
     from teardrop_cli import config
     from teardrop_cli.formatting import print_json, print_table, spinner
 
+    async def _fetch():
+        try:
+            return await client.get_marketplace_balance()
+        finally:
+            await client.close()
+
     client = config.get_client(base_url)
 
     with spinner("Fetching balance…"):
-        try:
-            data = asyncio.run(client.get_marketplace_balance())
-        finally:
-            asyncio.run(client.close())
+        data = asyncio.run(_fetch())
 
     if as_json:
         print_json(data)
@@ -66,13 +69,16 @@ def earnings(
     from teardrop_cli import config
     from teardrop_cli.formatting import print_json, print_table, spinner
 
+    async def _fetch():
+        try:
+            return await client.get_earnings(limit=limit, cursor=cursor)
+        finally:
+            await client.close()
+
     client = config.get_client(base_url)
 
     with spinner("Fetching earnings…"):
-        try:
-            data = asyncio.run(client.get_earnings(limit=limit, cursor=cursor))
-        finally:
-            asyncio.run(client.close())
+        data = asyncio.run(_fetch())
 
     if as_json:
         print_json(data)
@@ -123,15 +129,16 @@ def withdraw(
         if not confirm(f"Withdraw {amount_usdc} USDC to {payout_address}?"):
             raise typer.Abort()
 
+    async def _fetch():
+        try:
+            return await client.withdraw(WithdrawRequest(amount_usdc=amount_usdc, payout_address=payout_address))
+        finally:
+            await client.close()
+
     client = config.get_client(base_url)
 
     with spinner("Processing withdrawal…"):
-        try:
-            result = asyncio.run(
-                client.withdraw(WithdrawRequest(amount_usdc=amount_usdc, payout_address=payout_address))
-            )
-        finally:
-            asyncio.run(client.close())
+        result = asyncio.run(_fetch())
 
     if as_json:
         print_json(result)
@@ -165,13 +172,16 @@ def publish(
     from teardrop_cli import config
     from teardrop_cli.formatting import print_json, print_success, print_table, spinner
 
+    async def _fetch():
+        try:
+            return await client.set_author_config(payout_address)
+        finally:
+            await client.close()
+
     client = config.get_client(base_url)
 
     with spinner("Updating author config…"):
-        try:
-            result = asyncio.run(client.set_author_config(payout_address))
-        finally:
-            asyncio.run(client.close())
+        result = asyncio.run(_fetch())
 
     if as_json:
         print_json(result.model_dump() if hasattr(result, "model_dump") else result)

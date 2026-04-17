@@ -63,7 +63,7 @@ def run(
     except PaymentRequiredError as exc:
         print_error(
             "Insufficient balance.",
-            hint=f"Top up your account at {config.get_base_url()}/billing\n{exc}",
+            hint=f"Top up your account at {config.get_base_url()}/billing",
         )
         raise typer.Exit(2)
     except RateLimitError as exc:
@@ -73,8 +73,6 @@ def run(
         raise typer.Exit(3)
     except KeyboardInterrupt:
         raise typer.Exit(130)
-    finally:
-        asyncio.run(client.close())
 
 
 # ---------------------------------------------------------------------------
@@ -90,64 +88,67 @@ async def _run_rich(client, prompt: str, *, thread_id, model) -> None:
 
     from teardrop_cli.formatting import _print_billing_settlement, _print_usage_summary, console
 
-    accumulated = ""
-    tool_depth = 0
+    try:
+        accumulated = ""
+        tool_depth = 0
 
-    live = Live(
-        Markdown(""),
-        console=console,
-        refresh_per_second=15,
-        auto_refresh=True,
-        transient=False,
-    )
+        live = Live(
+            Markdown(""),
+            console=console,
+            refresh_per_second=15,
+            auto_refresh=True,
+            transient=False,
+        )
 
-    # Show a quick spinner before first token arrives
-    first_token = True
+        # Show a quick spinner before first token arrives
+        first_token = True
 
-    with live:
-        async for event in client.run(prompt, thread_id=thread_id, model=model):
-            ev_type: str = getattr(event, "type", "") or ""
-            data = getattr(event, "data", None)
+        with live:
+            async for event in client.run(prompt, thread_id=thread_id, model=model):
+                ev_type: str = getattr(event, "type", "") or ""
+                data = getattr(event, "data", None)
 
-            if ev_type == _EV_TEXT:
-                if first_token:
-                    first_token = False
-                chunk = _extract_text(data)
-                accumulated += chunk
-                live.update(Markdown(accumulated))
-
-            elif ev_type == _EV_TOOL_START:
-                tool_depth += 1
-                tool_name = _extract_tool_name(data)
-                indicator = f"\n\n*[Tool: {tool_name}…]*"
-                live.update(Markdown(accumulated + indicator))
-
-            elif ev_type == _EV_TOOL_END:
-                tool_depth = max(0, tool_depth - 1)
-                if tool_depth == 0:
+                if ev_type == _EV_TEXT:
+                    if first_token:
+                        first_token = False
+                    chunk = _extract_text(data)
+                    accumulated += chunk
                     live.update(Markdown(accumulated))
 
-            elif ev_type == _EV_USAGE:
-                if isinstance(data, dict):
+                elif ev_type == _EV_TOOL_START:
+                    tool_depth += 1
+                    tool_name = _extract_tool_name(data)
+                    indicator = f"\n\n*[Tool: {tool_name}…]*"
+                    live.update(Markdown(accumulated + indicator))
+
+                elif ev_type == _EV_TOOL_END:
+                    tool_depth = max(0, tool_depth - 1)
+                    if tool_depth == 0:
+                        live.update(Markdown(accumulated))
+
+                elif ev_type == _EV_USAGE:
+                    if isinstance(data, dict):
+                        live.stop()
+                        _print_usage_summary(data)
+
+                elif ev_type == _EV_BILLING:
+                    if isinstance(data, dict):
+                        _print_billing_settlement(data)
+
+                elif ev_type == _EV_ERROR:
+                    msg = _extract_text(data) or "Unknown agent error"
                     live.stop()
-                    _print_usage_summary(data)
+                    from teardrop_cli.formatting import print_error
 
-            elif ev_type == _EV_BILLING:
-                if isinstance(data, dict):
-                    _print_billing_settlement(data)
+                    print_error(f"Agent error: {msg}")
+                    raise typer.Exit(5)
 
-            elif ev_type == _EV_ERROR:
-                msg = _extract_text(data) or "Unknown agent error"
-                live.stop()
-                from teardrop_cli.formatting import print_error
+                elif ev_type == _EV_DONE:
+                    break
 
-                print_error(f"Agent error: {msg}")
-                raise typer.Exit(5)
-
-            elif ev_type == _EV_DONE:
-                break
-
-    console.print()  # trailing newline after stream
+        console.print()  # trailing newline after stream
+    finally:
+        await client.close()
 
 
 # ---------------------------------------------------------------------------
@@ -157,16 +158,19 @@ async def _run_rich(client, prompt: str, *, thread_id, model) -> None:
 
 async def _run_json(client, prompt: str, *, thread_id, model) -> None:
     """Emit each SSE event as a JSON line to stdout."""
-    async for event in client.run(prompt, thread_id=thread_id, model=model):
-        line = json.dumps(
-            {
-                "type": getattr(event, "type", None),
-                "data": getattr(event, "data", None),
-            },
-            default=str,
-        )
-        sys.stdout.write(line + "\n")
-        sys.stdout.flush()
+    try:
+        async for event in client.run(prompt, thread_id=thread_id, model=model):
+            line = json.dumps(
+                {
+                    "type": getattr(event, "type", None),
+                    "data": getattr(event, "data", None),
+                },
+                default=str,
+            )
+            sys.stdout.write(line + "\n")
+            sys.stdout.flush()
+    finally:
+        await client.close()
 
 
 # ---------------------------------------------------------------------------

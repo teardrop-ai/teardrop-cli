@@ -111,8 +111,13 @@ def store_token(token: str) -> None:
     if _keyring_available():
         import keyring
 
-        keyring.set_password(_KEYRING_SERVICE, _KEYRING_JWT_KEY, token)
-        return
+        try:
+            keyring.set_password(_KEYRING_SERVICE, _KEYRING_JWT_KEY, token)
+            return
+        except Exception:
+            # Keyring write failed (e.g. Windows CredWrite 2560-byte limit).
+            # Fall through to config file.
+            pass
 
     cfg = load_config()
     cfg.setdefault("auth", {})["token"] = token

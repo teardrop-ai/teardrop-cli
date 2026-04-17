@@ -64,6 +64,18 @@ Override the API endpoint for any command with `--base-url <url>` (hidden flag).
 
 ---
 
+## Billing
+
+```bash
+# Check account balance
+teardrop billing balance
+teardrop billing balance --json
+```
+
+Account balance is used to run agents. When it reaches zero, you'll get `PaymentRequiredError` (exit code 2).
+
+---
+
 ## Agent
 
 ### Run a prompt
@@ -88,7 +100,7 @@ Streaming output renders Markdown live in the terminal. Tool calls are shown inl
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 2 | Insufficient balance (`PaymentRequiredError`) |
+| 2 | Insufficient account balance (`PaymentRequiredError`) — use `teardrop billing balance` to check |
 | 3 | Rate limited (`RateLimitError`) |
 | 5 | Agent stream error |
 | 130 | Interrupted (`Ctrl-C`) |

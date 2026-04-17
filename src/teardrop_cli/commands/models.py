@@ -57,22 +57,18 @@ def benchmarks(
     client = config.get_client(base_url)
 
     try:
-        if org:
-            with spinner("Fetching org model benchmarks…"):
-                try:
-                    response = asyncio.run(
-                        client.get_org_model_benchmarks(org_id=org)
-                    )
-                finally:
-                    asyncio.run(client.close())
-        else:
-            with spinner("Fetching model benchmarks…"):
-                try:
-                    response = asyncio.run(
-                        client.get_model_benchmarks(no_cache=no_cache)
-                    )
-                finally:
-                    asyncio.run(client.close())
+        async def _fetch():
+            try:
+                if org:
+                    return await client.get_org_model_benchmarks(org_id=org)
+                else:
+                    return await client.get_model_benchmarks(no_cache=no_cache)
+            finally:
+                await client.close()
+
+        label = "Fetching org model benchmarks…" if org else "Fetching model benchmarks…"
+        with spinner(label):
+            response = asyncio.run(_fetch())
     except AuthenticationError:
         print_error(
             "Not authenticated.",
