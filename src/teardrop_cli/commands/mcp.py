@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -22,7 +22,7 @@ app = typer.Typer(
 @app.command(name="list")
 def list_servers(
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """List connected MCP servers."""
     from teardrop_cli import config
@@ -74,15 +74,15 @@ def add(
     name: Annotated[str, typer.Option("--name", "-n", help="Server name.")],
     url: Annotated[str, typer.Option("--url", "-u", help="Server URL.")],
     auth_type: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--auth-type", help="Auth type (e.g. none, bearer, basic)."),
     ] = None,
     auth_token: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--auth-token", help="Auth token / secret.", hide_input=True),
     ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """Add a new MCP server."""
     from teardrop import CreateMcpServerRequest
@@ -125,7 +125,7 @@ def add(
 def discover(
     server_id: Annotated[str, typer.Argument(help="MCP server ID.")],
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """Discover tools exposed by an MCP server."""
     from teardrop_cli import config
@@ -178,18 +178,15 @@ def discover(
 @app.command()
 def remove(
     server_id: Annotated[str, typer.Argument(help="MCP server ID to remove.")],
-    yes: Annotated[
-        bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")
-    ] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")] = False,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """Remove an MCP server."""
     from teardrop_cli import config
     from teardrop_cli.formatting import confirm, print_success, spinner
 
-    if not yes:
-        if not confirm(f"Remove MCP server [bold]{server_id}[/bold]?"):
-            raise typer.Abort()
+    if not yes and not confirm(f"Remove MCP server [bold]{server_id}[/bold]?"):
+        raise typer.Abort()
 
     client = config.get_client(base_url)
 

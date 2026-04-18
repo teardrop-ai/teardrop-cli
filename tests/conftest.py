@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-
 # ---------------------------------------------------------------------------
 # CLI runner
 # ---------------------------------------------------------------------------
@@ -84,9 +83,7 @@ def mock_client():
     client.get_marketplace_balance = AsyncMock(
         return_value={"available": "10.00", "currency": "USDC", "pending": "0.00"}
     )
-    client.get_earnings = AsyncMock(
-        return_value={"items": [], "next_cursor": None}
-    )
+    client.get_earnings = AsyncMock(return_value={"items": [], "next_cursor": None})
     client.withdraw = AsyncMock(return_value={"status": "pending", "id": "w_123"})
     client.set_author_config = AsyncMock(
         return_value=MagicMock(model_dump=lambda: {"payout_address": "0xABC"})
@@ -101,9 +98,7 @@ def mock_client():
             model_dump=lambda: {"id": "srv_1", "name": "my-mcp", "url": "http://mcp.local"},
         )
     )
-    client.discover_mcp_server_tools = AsyncMock(
-        return_value=MagicMock(tools=[])
-    )
+    client.discover_mcp_server_tools = AsyncMock(return_value=MagicMock(tools=[]))
     client.delete_mcp_server = AsyncMock(return_value=None)
 
     # tools
@@ -119,9 +114,7 @@ def mock_client():
                 "type": "function",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "Search query"}
-                    },
+                    "properties": {"query": {"type": "string", "description": "Search query"}},
                     "required": ["query"],
                 },
             },
@@ -138,7 +131,7 @@ def mock_client():
     client.run = _default_run
 
     # llm-config
-    from teardrop_cli._fixtures import make_llm_config, make_benchmarks_response
+    from teardrop_cli._fixtures import make_benchmarks_response, make_llm_config
 
     client.get_llm_config = AsyncMock(return_value=make_llm_config())
     client.set_llm_config = AsyncMock(return_value=make_llm_config())
@@ -152,9 +145,7 @@ def mock_client():
     from teardrop_cli._fixtures import make_siwe_session
 
     client.create_siwe_session = AsyncMock(return_value=make_siwe_session())
-    client.get_siwe_session = AsyncMock(
-        return_value=make_siwe_session(status="completed")
-    )
+    client.get_siwe_session = AsyncMock(return_value=make_siwe_session(status="completed"))
 
     return client
 

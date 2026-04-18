@@ -130,4 +130,3 @@ def make_benchmarks_response(models: list[dict] | None = None) -> MagicMock:
     obj.models = models
     obj.updated_at = data["updated_at"]
     return obj
-

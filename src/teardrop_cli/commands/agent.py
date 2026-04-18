@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -19,6 +19,7 @@ app = typer.Typer(
 @app.callback()
 def _callback() -> None:
     """Run prompts against the Teardrop AI agent."""
+
 
 # SSE event type constants (must match teardrop_sdk's streaming module)
 _EV_TEXT = "text_msg_content"
@@ -34,24 +35,22 @@ _EV_DONE = "done"
 def run(
     prompt: Annotated[str, typer.Argument(help="The prompt to send to the agent.")],
     thread_id: Annotated[
-        Optional[str], typer.Option("--thread-id", "-t", help="Continue an existing thread.")
+        str | None, typer.Option("--thread-id", "-t", help="Continue an existing thread.")
     ] = None,
-    model: Annotated[
-        Optional[str], typer.Option("--model", "-m", help="Model override.")
-    ] = None,
+    model: Annotated[str | None, typer.Option("--model", "-m", help="Model override.")] = None,
     as_json: Annotated[
         bool,
         typer.Option("--json", help="Emit raw SSE events as JSON lines (machine-readable)."),
     ] = False,
     base_url: Annotated[
-        Optional[str], typer.Option("--base-url", help="Override the API base URL.", hidden=True)
+        str | None, typer.Option("--base-url", help="Override the API base URL.", hidden=True)
     ] = None,
 ) -> None:
     """Send a prompt to the agent and stream the response."""
     from teardrop import PaymentRequiredError, RateLimitError
 
     from teardrop_cli import config
-    from teardrop_cli.formatting import print_error, spinner
+    from teardrop_cli.formatting import print_error
 
     client = config.get_client(base_url)
 
@@ -60,19 +59,19 @@ def run(
             asyncio.run(_run_json(client, prompt, thread_id=thread_id, model=model))
         else:
             asyncio.run(_run_rich(client, prompt, thread_id=thread_id, model=model))
-    except PaymentRequiredError as exc:
+    except PaymentRequiredError:
         print_error(
             "Insufficient balance.",
             hint=f"Top up your account at {config.get_base_url()}/billing",
         )
-        raise typer.Exit(2)
+        raise typer.Exit(2) from None
     except RateLimitError as exc:
         retry = getattr(exc, "retry_after", None)
         hint = f"Retry in {retry}s." if retry else "Please wait before retrying."
         print_error("Rate limited.", hint=hint)
-        raise typer.Exit(3)
+        raise typer.Exit(3) from None
     except KeyboardInterrupt:
-        raise typer.Exit(130)
+        raise typer.Exit(130) from None
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +81,6 @@ def run(
 
 async def _run_rich(client, prompt: str, *, thread_id, model) -> None:
     """Stream response with Rich Live rendering."""
-    from rich.console import Console
     from rich.live import Live
     from rich.markdown import Markdown
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -27,7 +27,7 @@ def _callback() -> None:
 @app.command()
 def balance(
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """Show your account balance."""
     from teardrop_cli import config

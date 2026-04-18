@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -34,9 +34,10 @@ def get(
     org_id: Annotated[str, typer.Argument(help="Organisation ID.")],
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     no_cache: Annotated[
-        bool, typer.Option("--no-cache", "--force-refresh", help="Bypass the local 5-minute cache.")
+        bool,
+        typer.Option("--no-cache", "--force-refresh", help="Bypass the local 5-minute cache."),
     ] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """Display the org's current LLM configuration."""
     from teardrop import AuthenticationError
@@ -47,6 +48,7 @@ def get(
     client = config.get_client(base_url)
 
     try:
+
         async def _fetch():
             try:
                 return await client.get_llm_config(org_id=org_id, no_cache=no_cache)
@@ -60,7 +62,7 @@ def get(
             "Not authenticated.",
             hint="Run: `teardrop auth login`",
         )
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as exc:
         _handle_common_error(exc)
 
@@ -73,6 +75,7 @@ def get(
     # Check for 404-equivalent (no custom config)
     if not data:
         from teardrop_cli.formatting import console
+
         console.print(
             f"[dim]No custom LLM config found for {org_id}. Using global defaults.[/dim]"
         )
@@ -108,30 +111,28 @@ def get(
 def set_config(
     org_id: Annotated[str, typer.Argument(help="Organisation ID.")],
     provider: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--provider", help="LLM provider (anthropic, openai, google, openrouter)."),
     ] = None,
-    model: Annotated[
-        Optional[str], typer.Option("--model", help="Model ID.")
-    ] = None,
+    model: Annotated[str | None, typer.Option("--model", help="Model ID.")] = None,
     routing: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--routing", help="Routing preference (default, cost, speed, quality)."),
     ] = None,
     api_base: Annotated[
-        Optional[str], typer.Option("--api-base", help="Self-hosted model base URL.")
+        str | None, typer.Option("--api-base", help="Self-hosted model base URL.")
     ] = None,
     max_tokens: Annotated[
-        Optional[int], typer.Option("--max-tokens", help="Max tokens (1–200,000).")
+        int | None, typer.Option("--max-tokens", help="Max tokens (1–200,000).")
     ] = None,
     temperature: Annotated[
-        Optional[float], typer.Option("--temperature", help="Temperature (0.0–2.0).")
+        float | None, typer.Option("--temperature", help="Temperature (0.0–2.0).")
     ] = None,
     timeout_seconds: Annotated[
-        Optional[int], typer.Option("--timeout-seconds", help="Timeout in seconds (≥1).")
+        int | None, typer.Option("--timeout-seconds", help="Timeout in seconds (≥1).")
     ] = None,
     byok_key: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--byok-key", help="Bring-your-own API key. Pass '-' to read from stdin."),
     ] = None,
     rotate_key: Annotated[
@@ -139,14 +140,13 @@ def set_config(
         typer.Option("--rotate-key", help="Rotate the existing API key (delete + re-add)."),
     ] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """Create or update the org's LLM configuration."""
     from teardrop import AuthenticationError
 
     from teardrop_cli import config
     from teardrop_cli.formatting import (
-        console,
         print_error,
         print_json,
         print_success,
@@ -199,9 +199,7 @@ def set_config(
 
     # Warn if sending a key over a non-HTTPS api_base
     if resolved_key and api_base and not api_base.startswith("https://"):
-        print_warning(
-            "api-base is not HTTPS. API keys must only be sent over TLS."
-        )
+        print_warning("api-base is not HTTPS. API keys must only be sent over TLS.")
 
     # ------------------------------------------------------------------
     # API call
@@ -230,6 +228,7 @@ def set_config(
         kwargs["api_key"] = resolved_key
 
     try:
+
         async def _fetch():
             try:
                 return await client.set_llm_config(**kwargs)
@@ -240,7 +239,7 @@ def set_config(
             cfg = asyncio.run(_fetch())
     except AuthenticationError:
         print_error("Not authenticated.", hint="Run: `teardrop auth login`")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as exc:
         _handle_common_error(exc)
 
@@ -280,10 +279,8 @@ def set_config(
 @app.command()
 def delete(
     org_id: Annotated[str, typer.Argument(help="Organisation ID.")],
-    yes: Annotated[
-        bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")
-    ] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")] = False,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """Remove org's custom LLM config and revert to global defaults."""
     from teardrop import AuthenticationError
@@ -301,6 +298,7 @@ def delete(
     client = config.get_client(base_url)
 
     try:
+
         async def _fetch():
             try:
                 await client.delete_llm_config(org_id=org_id)
@@ -311,7 +309,7 @@ def delete(
             asyncio.run(_fetch())
     except AuthenticationError:
         print_error("Not authenticated.", hint="Run: `teardrop auth login`")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as exc:
         # 404 is treated as success (already using defaults)
         _handle_common_error(exc, not_found_ok=True)

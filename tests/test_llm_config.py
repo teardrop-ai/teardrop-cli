@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-import pytest
 from typer.testing import CliRunner
 
 from teardrop_cli.cli import app
@@ -51,9 +50,13 @@ class TestLlmConfigSet:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "anthropic",
-                "--model", "claude-haiku-4-5-20251001",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "anthropic",
+                "--model",
+                "claude-haiku-4-5-20251001",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -63,10 +66,15 @@ class TestLlmConfigSet:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "anthropic",
-                "--model", "claude-haiku-4-5-20251001",
-                "--routing", "cost",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "anthropic",
+                "--model",
+                "claude-haiku-4-5-20251001",
+                "--routing",
+                "cost",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -77,9 +85,13 @@ class TestLlmConfigSet:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "openai",
-                "--model", "gpt-4o",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "openai",
+                "--model",
+                "gpt-4o",
                 "--json",
             ],
         )
@@ -101,10 +113,15 @@ class TestLlmConfigSet:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "anthropic",
-                "--model", "claude-haiku-4-5-20251001",
-                "--routing", "turbo",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "anthropic",
+                "--model",
+                "claude-haiku-4-5-20251001",
+                "--routing",
+                "turbo",
             ],
         )
         assert result.exit_code == 1
@@ -114,10 +131,15 @@ class TestLlmConfigSet:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "anthropic",
-                "--model", "claude-haiku-4-5-20251001",
-                "--temperature", "3.0",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "anthropic",
+                "--model",
+                "claude-haiku-4-5-20251001",
+                "--temperature",
+                "3.0",
             ],
         )
         assert result.exit_code == 1
@@ -127,10 +149,15 @@ class TestLlmConfigSet:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "anthropic",
-                "--model", "claude-haiku-4-5-20251001",
-                "--max-tokens", "300000",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "anthropic",
+                "--model",
+                "claude-haiku-4-5-20251001",
+                "--max-tokens",
+                "300000",
             ],
         )
         assert result.exit_code == 1
@@ -141,10 +168,15 @@ class TestLlmConfigSet:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "openai",
-                "--model", "gpt-4o",
-                "--byok-key", "sk-supersecret",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "openai",
+                "--model",
+                "gpt-4o",
+                "--byok-key",
+                "sk-supersecret",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -154,10 +186,15 @@ class TestLlmConfigSet:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "openai",
-                "--model", "gpt-4o",
-                "--byok-key", "-",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "openai",
+                "--model",
+                "gpt-4o",
+                "--byok-key",
+                "-",
             ],
             input="sk-from-stdin\n",
         )
@@ -183,10 +220,15 @@ class TestLlmConfigSet:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "openai",
-                "--model", "llama2",
-                "--api-base", "http://192.168.1.1:8000",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "openai",
+                "--model",
+                "llama2",
+                "--api-base",
+                "http://192.168.1.1:8000",
             ],
         )
         assert result.exit_code == 1
@@ -207,9 +249,13 @@ class TestLlmConfigSet:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "anthropic",
-                "--model", "claude-haiku-4-5-20251001",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "anthropic",
+                "--model",
+                "claude-haiku-4-5-20251001",
                 "--rotate-key",
             ],
         )
@@ -231,7 +277,7 @@ class TestLlmConfigDelete:
         assert "Deleted" in result.output
 
     def test_delete_prompt_denied(self, runner: CliRunner, patch_get_client, mock_client):
-        result = runner.invoke(app, ["llm-config", "delete", "org-1"], input="n\n")
+        runner.invoke(app, ["llm-config", "delete", "org-1"], input="n\n")
         # Aborted — should not call SDK
         mock_client.delete_llm_config.assert_not_called()
 
@@ -265,9 +311,13 @@ class TestLlmConfigSetExtended:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "openrouter",
-                "--model", "mistralai/mixtral-8x7b",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "openrouter",
+                "--model",
+                "mistralai/mixtral-8x7b",
             ],
         )
         assert result.exit_code == 0, result.output
@@ -291,10 +341,15 @@ class TestLlmConfigSetExtended:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "anthropic",
-                "--model", "claude-haiku-4-5-20251001",
-                "--timeout-seconds", "0",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "anthropic",
+                "--model",
+                "claude-haiku-4-5-20251001",
+                "--timeout-seconds",
+                "0",
             ],
         )
         assert result.exit_code == 1
@@ -303,6 +358,7 @@ class TestLlmConfigSetExtended:
     def test_set_byok_key_masked_in_output(self, runner: CliRunner, patch_get_client, mock_client):
         """When a BYOK key is set, success output should show masked key, not raw value."""
         from unittest.mock import AsyncMock
+
         from teardrop_cli._fixtures import make_llm_config
 
         mock_client.set_llm_config = AsyncMock(
@@ -311,10 +367,15 @@ class TestLlmConfigSetExtended:
         result = runner.invoke(
             app,
             [
-                "llm-config", "set", "org-1",
-                "--provider", "openai",
-                "--model", "gpt-4o",
-                "--byok-key", "sk-supersecret123",
+                "llm-config",
+                "set",
+                "org-1",
+                "--provider",
+                "openai",
+                "--model",
+                "gpt-4o",
+                "--byok-key",
+                "sk-supersecret123",
             ],
         )
         assert result.exit_code == 0, result.output

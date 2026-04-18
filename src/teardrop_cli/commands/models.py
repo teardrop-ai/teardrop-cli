@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -27,7 +27,7 @@ def _callback() -> None:
 @app.command()
 def benchmarks(
     org: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--org", help="Org ID for org-scoped metrics (requires auth)."),
     ] = None,
     no_cache: Annotated[
@@ -35,7 +35,7 @@ def benchmarks(
         typer.Option("--no-cache", "--force-refresh", help="Bypass the local 10-minute cache."),
     ] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """Display model catalogue with operational metrics.
 
@@ -46,17 +46,16 @@ def benchmarks(
 
     from teardrop_cli import config
     from teardrop_cli.formatting import (
-        console,
         data_console,
         print_error,
         print_json,
-        print_table,
         spinner,
     )
 
     client = config.get_client(base_url)
 
     try:
+
         async def _fetch():
             try:
                 if org:
@@ -74,14 +73,14 @@ def benchmarks(
             "Not authenticated.",
             hint="Run: `teardrop auth login`",
         )
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as exc:
         status = getattr(exc, "status_code", None) or getattr(exc, "status", None)
         if status == 401:
             print_error("Not authenticated.", hint="Run: `teardrop auth login`")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
         print_error(f"Unexpected error: {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     data = response if isinstance(response, dict) else response.model_dump()
     models_list: list[dict] = data.get("models", [])
@@ -156,9 +155,7 @@ def _print_org_benchmarks(models: list[dict], *, org_id: str) -> None:
     """Render the org-scoped benchmark table."""
     from teardrop_cli.formatting import data_console, print_table
 
-    data_console.print(
-        f"[bold]Your org's model usage (7-day aggregate) — {org_id}[/bold]"
-    )
+    data_console.print(f"[bold]Your org's model usage (7-day aggregate) — {org_id}[/bold]")
 
     rows = []
     for m in models:
@@ -171,10 +168,14 @@ def _print_org_benchmarks(models: list[dict], *, org_id: str) -> None:
                 m.get("provider", "—"),
                 m.get("model", "—"),
                 str(runs) if runs is not None else "—",
-                f"{b.get('avg_latency_ms', '—')} ms" if b.get("avg_latency_ms") is not None else "—",
+                f"{b.get('avg_latency_ms', '—')} ms"
+                if b.get("avg_latency_ms") is not None
+                else "—",
                 f"${avg_cost:.2f}" if avg_cost is not None else "—",
                 f"${total_cost:.2f}" if total_cost is not None else "—",
-                f"{b.get('avg_tokens_per_sec', '—'):.1f}" if b.get("avg_tokens_per_sec") is not None else "—",
+                f"{b.get('avg_tokens_per_sec', '—'):.1f}"
+                if b.get("avg_tokens_per_sec") is not None
+                else "—",
             ]
         )
 

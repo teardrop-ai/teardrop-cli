@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -22,7 +22,7 @@ app = typer.Typer(
 @app.command()
 def balance(
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """Show your marketplace balance."""
     from teardrop_cli import config
@@ -59,11 +59,9 @@ def balance(
 @app.command()
 def earnings(
     limit: Annotated[int, typer.Option("--limit", "-l", help="Max entries to return.")] = 20,
-    cursor: Annotated[
-        Optional[str], typer.Option("--cursor", help="Pagination cursor.")
-    ] = None,
+    cursor: Annotated[str | None, typer.Option("--cursor", help="Pagination cursor.")] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """List marketplace earnings."""
     from teardrop_cli import config
@@ -109,15 +107,15 @@ def earnings(
 
 @app.command()
 def withdraw(
-    amount_usdc: Annotated[int, typer.Option("--amount-usdc", "-a", help="Amount to withdraw in USDC (integer).")],
+    amount_usdc: Annotated[
+        int, typer.Option("--amount-usdc", "-a", help="Amount to withdraw in USDC (integer).")
+    ],
     payout_address: Annotated[
         str, typer.Option("--payout-address", help="Wallet address to send funds to.")
     ],
-    yes: Annotated[
-        bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")
-    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """Withdraw marketplace earnings to a wallet address."""
     from teardrop import WithdrawRequest
@@ -125,13 +123,14 @@ def withdraw(
     from teardrop_cli import config
     from teardrop_cli.formatting import confirm, print_json, print_success, print_table, spinner
 
-    if not yes:
-        if not confirm(f"Withdraw {amount_usdc} USDC to {payout_address}?"):
-            raise typer.Abort()
+    if not yes and not confirm(f"Withdraw {amount_usdc} USDC to {payout_address}?"):
+        raise typer.Abort()
 
     async def _fetch():
         try:
-            return await client.withdraw(WithdrawRequest(amount_usdc=amount_usdc, payout_address=payout_address))
+            return await client.withdraw(
+                WithdrawRequest(amount_usdc=amount_usdc, payout_address=payout_address)
+            )
         finally:
             await client.close()
 
@@ -166,7 +165,7 @@ def publish(
         ),
     ],
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """Set your marketplace author config (payout address)."""
     from teardrop_cli import config

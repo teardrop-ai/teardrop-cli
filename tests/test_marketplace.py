@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-import pytest
 from typer.testing import CliRunner
 
 from teardrop_cli.cli import app
@@ -58,7 +57,15 @@ class TestWithdraw:
     def test_withdraw_with_yes_flag(self, runner: CliRunner, patch_get_client):
         result = runner.invoke(
             app,
-            ["marketplace", "withdraw", "--amount-usdc", "100", "--payout-address", "0xABC", "--yes"],
+            [
+                "marketplace",
+                "withdraw",
+                "--amount-usdc",
+                "100",
+                "--payout-address",
+                "0xABC",
+                "--yes",
+            ],
         )
         assert result.exit_code == 0, result.output
 
@@ -83,9 +90,7 @@ class TestWithdraw:
 
 class TestPublish:
     def test_publish_sets_payout(self, runner: CliRunner, patch_get_client):
-        result = runner.invoke(
-            app, ["marketplace", "publish", "--payout-address", "0xDEAD"]
-        )
+        result = runner.invoke(app, ["marketplace", "publish", "--payout-address", "0xDEAD"])
         assert result.exit_code == 0, result.output
 
     def test_publish_json(self, runner: CliRunner, patch_get_client):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
@@ -23,7 +23,7 @@ app = typer.Typer(
 @app.command(name="list")
 def list_tools(
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """List org tools."""
     from teardrop_cli import config
@@ -73,7 +73,7 @@ def list_tools(
 def test_tool(
     tool_id: Annotated[str, typer.Argument(help="Tool ID to inspect.")],
     input_json: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--input",
             "-i",
@@ -81,7 +81,7 @@ def test_tool(
         ),
     ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
-    base_url: Annotated[Optional[str], typer.Option("--base-url", hidden=True)] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
     """Fetch a tool definition and optionally validate input against its schema."""
     from teardrop_cli import config
@@ -90,8 +90,8 @@ def test_tool(
         data_console,
         print_error,
         print_json,
-        print_table,
         print_success,
+        print_table,
         spinner,
     )
 
@@ -114,9 +114,7 @@ def test_tool(
 
     # Display tool metadata
     meta_rows = [
-        [k, v]
-        for k, v in tool_data.items()
-        if k not in ("parameters", "schema") and v is not None
+        [k, v] for k, v in tool_data.items() if k not in ("parameters", "schema") and v is not None
     ]
     print_table([("Field", {"style": "bold cyan"}), "Value"], meta_rows, title="Tool Definition")
 
@@ -147,7 +145,7 @@ def test_tool(
             input_data = json.loads(input_json)
         except json.JSONDecodeError as exc:
             print_error(f"Invalid JSON input: {exc}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         errors = _validate_input(schema, input_data) if schema else []
         if errors:

@@ -12,6 +12,7 @@ Config/data directories follow XDG / platformdirs conventions.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import stat
 import tomllib
@@ -69,10 +70,8 @@ def save_config(data: dict[str, Any]) -> None:
     cfg_path = _config_file()
     cfg_path.write_text(tomli_w.dumps(data), encoding="utf-8")
     # Restrict permissions on POSIX (0o600); Windows ignores this silently.
-    try:
+    with contextlib.suppress(NotImplementedError):
         cfg_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-    except NotImplementedError:
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -169,10 +168,8 @@ def clear_credentials() -> None:
             _KEYRING_CLIENT_ID_KEY,
             _KEYRING_CLIENT_SECRET_KEY,
         ):
-            try:
+            with contextlib.suppress(Exception):
                 keyring.delete_password(_KEYRING_SERVICE, key)
-            except Exception:
-                pass
 
     cfg = load_config()
     cfg.pop("auth", None)

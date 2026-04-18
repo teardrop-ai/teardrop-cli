@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import click
 
 if TYPE_CHECKING:
-    import typer
+    pass
 
 
 class LazyGroup(click.Group):

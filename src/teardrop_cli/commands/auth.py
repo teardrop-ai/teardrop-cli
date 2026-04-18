@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Annotated, Optional
+from datetime import UTC
+from typing import Annotated
 
 import typer
 
@@ -21,25 +22,23 @@ app = typer.Typer(
 
 @app.command()
 def login(
-    email: Annotated[Optional[str], typer.Option("--email", "-e", help="Email address.")] = None,
+    email: Annotated[str | None, typer.Option("--email", "-e", help="Email address.")] = None,
     secret: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--secret", "-s", help="Password / secret.", hide_input=True),
     ] = None,
-    client_id: Annotated[
-        Optional[str], typer.Option("--client-id", help="M2M client ID.")
-    ] = None,
+    client_id: Annotated[str | None, typer.Option("--client-id", help="M2M client ID.")] = None,
     client_secret: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--client-secret", help="M2M client secret.", hide_input=True),
     ] = None,
     token: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--token", "-t", help="Pre-existing static JWT token.", hide_input=True),
     ] = None,
     siwe: Annotated[bool, typer.Option("--siwe", help="Sign in with Ethereum wallet.")] = False,
     base_url: Annotated[
-        Optional[str], typer.Option("--base-url", help="Override the API base URL.", hidden=True)
+        str | None, typer.Option("--base-url", help="Override the API base URL.", hidden=True)
     ] = None,
 ) -> None:
     """Authenticate with the Teardrop API and store credentials locally."""
@@ -161,12 +160,12 @@ def _login_siwe(url: str) -> None:
             nonce = nonce_resp.get("nonce", nonce_resp.get("value", ""))
 
             # Construct EIP-4361 message
-            from datetime import datetime, timezone
+            from datetime import datetime
             from urllib.parse import urlparse
 
             parsed = urlparse(url)
             domain = parsed.netloc or parsed.path
-            issued_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            issued_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
             message = (
                 f"{domain} wants you to sign in with your Ethereum account:\n"
                 f"{wallet_address}\n\n"
@@ -237,7 +236,7 @@ def logout() -> None:
 @app.command()
 def whoami(
     base_url: Annotated[
-        Optional[str], typer.Option("--base-url", help="Override the API base URL.", hidden=True)
+        str | None, typer.Option("--base-url", help="Override the API base URL.", hidden=True)
     ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
 ) -> None:

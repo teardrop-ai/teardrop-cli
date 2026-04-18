@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock
 
-import pytest
 from typer.testing import CliRunner
 
 from teardrop_cli.cli import app
@@ -26,7 +25,9 @@ class TestModelsBenchmarks:
         assert "models" in data
         assert len(data["models"]) > 0
 
-    def test_public_benchmarks_no_cache_flag(self, runner: CliRunner, patch_get_client, mock_client):
+    def test_public_benchmarks_no_cache_flag(
+        self, runner: CliRunner, patch_get_client, mock_client
+    ):
         runner.invoke(app, ["models", "benchmarks", "--no-cache"])
         mock_client.get_model_benchmarks.assert_called_once()
         _, kwargs = mock_client.get_model_benchmarks.call_args
@@ -126,6 +127,7 @@ class TestModelsBenchmarksOrgExtended:
     ):
         """Total Cost column = Runs × Avg Cost/Run, rendered in org benchmarks table."""
         from unittest.mock import AsyncMock
+
         from teardrop_cli._fixtures import make_benchmarks_response
 
         mock_client.get_org_model_benchmarks = AsyncMock(
@@ -161,6 +163,7 @@ class TestModelsBenchmarksOrgExtended:
     ):
         """Models with null benchmarks render Total Cost as dash, not an error."""
         from unittest.mock import AsyncMock
+
         from teardrop_cli._fixtures import make_benchmarks_response
 
         mock_client.get_org_model_benchmarks = AsyncMock(

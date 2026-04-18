@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 from typer.testing import CliRunner
 
 from teardrop_cli.cli import app
@@ -20,7 +19,7 @@ class TestAgentRun:
         """--json flag emits SSE events as JSON lines on stdout."""
         result = runner.invoke(app, ["agent", "run", "--json", "hello"])
         assert result.exit_code == 0, result.output
-        lines = [l for l in result.output.strip().splitlines() if l]
+        lines = [line for line in result.output.strip().splitlines() if line]
         assert len(lines) >= 1
         for line in lines:
             event = json.loads(line)
