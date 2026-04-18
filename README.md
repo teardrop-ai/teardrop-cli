@@ -47,7 +47,11 @@ teardrop auth login --email user@example.com --secret ••••
 teardrop auth login --client-id <id> --client-secret <secret>
 
 # Sign-In With Ethereum (EIP-4361)
+# On macOS/Linux:
 export TEARDROP_SIWE_PRIVATE_KEY=0x<private-key>
+# On Windows (PowerShell):
+$env:TEARDROP_SIWE_PRIVATE_KEY = "0x<private-key>"
+# Then:
 teardrop auth login --siwe
 
 # Pre-issued JWT
@@ -227,7 +231,7 @@ teardrop llm-config delete org-1
 teardrop llm-config delete org-1 --yes    # skip confirm
 ```
 
-**Supported providers:** `anthropic`, `openai`, `google`
+**Supported providers:** `anthropic`, `openai`, `google`, `openrouter`
 
 **Routing preferences:** `default`, `cost`, `speed`, `quality`
 
@@ -271,6 +275,7 @@ Organization-scoped metrics show your org's actual performance:
 - Number of runs
 - Average latency
 - Average cost per run
+- Total cost (7-day sum)
 - Tokens per second
 
 **Caching:**

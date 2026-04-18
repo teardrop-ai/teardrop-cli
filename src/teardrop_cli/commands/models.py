@@ -163,13 +163,17 @@ def _print_org_benchmarks(models: list[dict], *, org_id: str) -> None:
     rows = []
     for m in models:
         b = m.get("benchmarks") or {}
+        runs = b.get("total_runs_7d")
+        avg_cost = b.get("avg_cost_usdc_per_run")
+        total_cost = (runs * avg_cost) if (runs is not None and avg_cost is not None) else None
         rows.append(
             [
                 m.get("provider", "—"),
                 m.get("model", "—"),
-                str(b.get("total_runs_7d", "—")),
+                str(runs) if runs is not None else "—",
                 f"{b.get('avg_latency_ms', '—')} ms" if b.get("avg_latency_ms") is not None else "—",
-                f"${b.get('avg_cost_usdc_per_run', '—'):.2f}" if b.get("avg_cost_usdc_per_run") is not None else "—",
+                f"${avg_cost:.2f}" if avg_cost is not None else "—",
+                f"${total_cost:.2f}" if total_cost is not None else "—",
                 f"{b.get('avg_tokens_per_sec', '—'):.1f}" if b.get("avg_tokens_per_sec") is not None else "—",
             ]
         )
@@ -181,6 +185,7 @@ def _print_org_benchmarks(models: list[dict], *, org_id: str) -> None:
             ("Runs", {"justify": "right"}),
             ("Avg Latency", {"justify": "right"}),
             ("Avg Cost/Run", {"justify": "right"}),
+            ("Total Cost", {"justify": "right"}),
             ("Tokens/sec", {"justify": "right"}),
         ],
         rows,

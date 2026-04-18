@@ -14,8 +14,14 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-_SUPPORTED_PROVIDERS = ["anthropic", "openai", "google"]
+_SUPPORTED_PROVIDERS = ["anthropic", "openai", "google", "openrouter"]
 _SUPPORTED_ROUTINGS = ["default", "cost", "speed", "quality"]
+
+
+def _mask_api_key(key: str) -> str:
+    """Return first 5 chars of *key* followed by bullet ellipsis."""
+    prefix = key[:5] if len(key) >= 5 else key
+    return f"{prefix}••••"
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +109,7 @@ def set_config(
     org_id: Annotated[str, typer.Argument(help="Organisation ID.")],
     provider: Annotated[
         Optional[str],
-        typer.Option("--provider", help="LLM provider (anthropic, openai, google)."),
+        typer.Option("--provider", help="LLM provider (anthropic, openai, google, openrouter)."),
     ] = None,
     model: Annotated[
         Optional[str], typer.Option("--model", help="Model ID.")
@@ -255,7 +261,8 @@ def set_config(
     if data.get("api_base"):
         summary_rows.append(["Self-Hosted URL", data["api_base"]])
     if data.get("has_api_key"):
-        summary_rows.append(["API Key Set", "true"])
+        key_display = f"true ({_mask_api_key(resolved_key)})" if resolved_key else "true"
+        summary_rows.append(["API Key Set", key_display])
     if data.get("is_byok"):
         summary_rows.append(["Is BYOK", "true"])
 

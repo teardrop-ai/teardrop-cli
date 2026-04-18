@@ -78,6 +78,26 @@ def make_llm_config(
     return obj
 
 
+def make_siwe_session(
+    session_id: str = "siwe_sess_1",
+    status: str = "pending",
+    nonce: str = "abc123nonce",
+    jwt: str | None = None,
+) -> MagicMock:
+    """Return a minimal SiweSession-like mock."""
+    data = {
+        "id": session_id,
+        "status": status,
+        "nonce": nonce,
+        "jwt": jwt,
+    }
+    obj = MagicMock()
+    obj.model_dump = lambda: dict(data)
+    for k, v in data.items():
+        setattr(obj, k, v)
+    return obj
+
+
 def make_benchmarks_response(models: list[dict] | None = None) -> MagicMock:
     """Return a minimal ModelBenchmarksResponse-like mock."""
     if models is None:

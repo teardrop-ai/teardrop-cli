@@ -255,3 +255,72 @@ class TestLlmConfigDelete:
         runner.invoke(app, ["llm-config", "delete", "org-99", "--yes"])
         _, kwargs = mock_client.delete_llm_config.call_args
         assert kwargs["org_id"] == "org-99"
+
+
+class TestLlmConfigSetExtended:
+    """Additional set-command tests for correctness and edge cases."""
+
+    def test_set_openrouter_valid_provider(self, runner: CliRunner, patch_get_client, mock_client):
+        """openrouter is a supported provider and should not raise an error."""
+        result = runner.invoke(
+            app,
+            [
+                "llm-config", "set", "org-1",
+                "--provider", "openrouter",
+                "--model", "mistralai/mixtral-8x7b",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        _, kwargs = mock_client.set_llm_config.call_args
+        assert kwargs["provider"] == "openrouter"
+
+    def test_set_routing_only(self, runner: CliRunner, patch_get_client, mock_client):
+        """Routing preference can be updated without specifying provider or model."""
+        result = runner.invoke(
+            app,
+            ["llm-config", "set", "org-1", "--routing", "cost"],
+        )
+        assert result.exit_code == 0, result.output
+        _, kwargs = mock_client.set_llm_config.call_args
+        assert kwargs["routing_preference"] == "cost"
+        assert "provider" not in kwargs
+        assert "model" not in kwargs
+
+    def test_set_timeout_zero_invalid(self, runner: CliRunner, patch_get_client):
+        """--timeout-seconds 0 must be rejected (must be ≥ 1)."""
+        result = runner.invoke(
+            app,
+            [
+                "llm-config", "set", "org-1",
+                "--provider", "anthropic",
+                "--model", "claude-haiku-4-5-20251001",
+                "--timeout-seconds", "0",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "timeout" in result.output.lower()
+
+    def test_set_byok_key_masked_in_output(self, runner: CliRunner, patch_get_client, mock_client):
+        """When a BYOK key is set, success output should show masked key, not raw value."""
+        from unittest.mock import AsyncMock
+        from teardrop_cli._fixtures import make_llm_config
+
+        mock_client.set_llm_config = AsyncMock(
+            return_value=make_llm_config(has_api_key=True, is_byok=True)
+        )
+        result = runner.invoke(
+            app,
+            [
+                "llm-config", "set", "org-1",
+                "--provider", "openai",
+                "--model", "gpt-4o",
+                "--byok-key", "sk-supersecret123",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        # Raw key must not appear in output
+        assert "sk-supersecret123" not in result.output
+        # Masked prefix (first 5 chars) should appear
+        assert "sk-su" in result.output
+        # Mask bullets should appear
+        assert "••••" in result.output
