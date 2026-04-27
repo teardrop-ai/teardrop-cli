@@ -1,13 +1,13 @@
 # teardrop-cli
 
-Command-line interface for the [Teardrop](https://teardrop.dev) crypto-native AI agent platform. Authenticate, run prompts against agents, manage marketplace earnings, configure MCP servers, and inspect organization tools.
+Command-line interface for [Teardrop](https://teardrop.dev) — the crypto-native AI agent platform. Publish tools to the marketplace, subscribe to third-party tools, run agents, manage USDC billing, and configure bring-your-own-key LLM settings, all from a single CLI.
 
 ---
 
 ## Requirements
 
 - Python ≥ 3.11
-- A Teardrop account (email/password, M2M client credentials, Ethereum wallet, or pre-issued JWT)
+- A Teardrop account ([sign up](https://teardrop.dev))
 
 ---
 
@@ -15,291 +15,430 @@ Command-line interface for the [Teardrop](https://teardrop.dev) crypto-native AI
 
 ```bash
 pip install teardrop-cli
+teardrop --version
 ```
 
-Verify the installation:
+---
+
+## Quick Start
 
 ```bash
-teardrop --version
+# 1. Install
+pip install teardrop-cli
+
+# 2. Log in (prompts for email + password if flags are omitted)
+teardrop auth login --email you@example.com --secret ••••
+
+# 3. Run your first agent prompt
+teardrop run "What is the current ETH gas price?"
 ```
 
 ---
 
 ## Authentication
 
-Credentials are resolved in this priority order at runtime:
-
-| Priority | Source |
-|----------|--------|
-| 1 | `TEARDROP_TOKEN` env var (static JWT) |
-| 2 | `TEARDROP_EMAIL` + `TEARDROP_SECRET` env vars |
-| 3 | `TEARDROP_CLIENT_ID` + `TEARDROP_CLIENT_SECRET` env vars |
-| 4 | System keyring |
-| 5 | Config file (`~/.config/teardrop/config.toml`) |
-
 ### Login flows
 
 ```bash
-# Email + password (interactive prompts if flags omitted)
-teardrop auth login --email user@example.com --secret ••••
+# Email + password
+teardrop auth login --email you@example.com --secret ••••
 
 # Machine-to-machine (client credentials)
 teardrop auth login --client-id <id> --client-secret <secret>
 
-# Sign-In With Ethereum (EIP-4361)
-# On macOS/Linux:
-export TEARDROP_SIWE_PRIVATE_KEY=0x<private-key>
-# On Windows (PowerShell):
-$env:TEARDROP_SIWE_PRIVATE_KEY = "0x<private-key>"
-# Then:
-teardrop auth login --siwe
-
 # Pre-issued JWT
 teardrop auth login --token <jwt>
+
+# Sign-In With Ethereum (EIP-4361)
+# macOS / Linux
+export TEARDROP_SIWE_PRIVATE_KEY=0x<private-key>
+# Windows (PowerShell)
+$env:TEARDROP_SIWE_PRIVATE_KEY = "0x<private-key>"
+
+teardrop auth login --siwe
 ```
+
+### Identity & session
 
 ```bash
-teardrop auth whoami            # show current identity
-teardrop auth whoami --json     # as JSON
-teardrop auth logout            # clear all stored credentials
+teardrop auth status        # show authenticated identity
+teardrop auth status --json # as JSON
+teardrop auth logout        # revoke refresh token and clear stored credentials
 ```
 
-Override the API endpoint for any command with `--base-url <url>` (hidden flag).
+### Credential resolution order
+
+At runtime, credentials are resolved in this priority order:
+
+| Priority | Source |
+|----------|--------|
+| 1 | `TEARDROP_API_KEY` env var (static JWT) |
+| 2 | `TEARDROP_EMAIL` + `TEARDROP_SECRET` env vars |
+| 3 | `TEARDROP_CLIENT_ID` + `TEARDROP_CLIENT_SECRET` env vars |
+| 4 | `access_token` in `~/.teardrop/config.toml` |
+| 5 | System keyring (email + secret, or client credentials) |
 
 ---
 
-## Billing
+## Running Agents
 
 ```bash
-# Check account balance
-teardrop billing balance
-teardrop billing balance --json
+# Basic prompt (streams Markdown to the terminal)
+teardrop run "Summarize the latest ETH gas trends"
+
+# Continue an existing conversation thread
+teardrop run "Follow up on that" --thread <thread-id>
+
+# Attach structured context
+teardrop run "Process this order" --context '{"order_id": "ord_123"}'
+
+# Collect the full response before printing (no streaming)
+teardrop run "Give me a report" --no-stream
+
+# Machine-readable JSON output
+teardrop run "..." --json
 ```
 
-Account balance is used to run agents. When it reaches zero, you'll get `PaymentRequiredError` (exit code 2).
-
----
-
-## Agent
-
-### Run a prompt
-
-```bash
-teardrop agent run "Summarize the latest ETH gas trends"
-
-# Continue an existing thread
-teardrop agent run "Follow up on that" --thread-id <id>
-
-# Override model
-teardrop agent run "..." --model gpt-4o
-
-# Machine-readable: one JSON object per line (SSE event passthrough)
-teardrop agent run "..." --json
-```
-
-Streaming output renders Markdown live in the terminal. Tool calls are shown inline as they execute. A usage summary (input/output tokens + cost) is printed at the end.
+Streaming output renders Markdown live. Tool calls appear inline as they execute. A token + cost summary is printed at the end of each run.
 
 **Exit codes:**
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 2 | Insufficient account balance (`PaymentRequiredError`) — use `teardrop billing balance` to check |
-| 3 | Rate limited (`RateLimitError`) |
-| 5 | Agent stream error |
-| 130 | Interrupted (`Ctrl-C`) |
+| 1 | Error (auth, rate limit, API, insufficient credit) |
+| 2 | Invalid `--context` JSON |
+
+If you hit a credit error, top up with `teardrop topup stripe --amount 10.00`.
 
 ---
 
-## Marketplace
+## Billing & Credits
+
+### Check balance and usage
 
 ```bash
-# Current balance
-teardrop marketplace balance
-teardrop marketplace balance --json
+teardrop balance             # credit balance, spending limit, daily spend
+teardrop balance --json
 
-# Earnings history
-teardrop marketplace earnings
-teardrop marketplace earnings --limit 50 --cursor <cursor>
-
-# Withdraw USDC
-teardrop marketplace withdraw --amount-usdc 100 --payout-address 0x...
-teardrop marketplace withdraw --amount-usdc 100 --payout-address 0x... --yes   # skip confirm
-
-# Register payout address for marketplace listings
-teardrop marketplace publish --payout-address 0x...
+teardrop usage               # token and run totals (all time)
+teardrop usage --start 2026-01-01 --end 2026-01-31
+teardrop usage --json
 ```
 
----
-
-## MCP Servers
-
-Manage Model Context Protocol servers attached to your organization.
+### Top up via Stripe (credit card)
 
 ```bash
-# List registered servers
-teardrop mcp list
-
-# Add a server
-teardrop mcp add --name "my-server" --url https://mcp.example.com
-teardrop mcp add --name "secure" --url https://mcp.example.com \
-    --auth-type bearer --auth-token <token>
-
-# Discover tools exposed by a server
-teardrop mcp discover <server-id>
-
-# Remove a server
-teardrop mcp remove <server-id>
-teardrop mcp remove <server-id> --yes    # skip confirm
+teardrop topup stripe --amount 25.00
 ```
 
----
+Opens a Stripe checkout page in your browser. The CLI polls for completion and prints your new balance when payment is confirmed. Add `--no-browser` to print the checkout URL instead of auto-opening it.
 
-## Tools
-
-Inspect and dry-run validate organization tools.
+### Top up via USDC (on-chain)
 
 ```bash
-# List all tools
+teardrop topup usdc --amount 25.00
+```
+
+Prints an x402 payment description — a set of on-chain USDC payment requirements specifying the receiving address, amount, and chain. Send the exact amount to the given address using any USDC-compatible wallet; your balance updates automatically once the transaction confirms.
+
+---
+
+## Tool Marketplace
+
+The marketplace lets your org **consume** tools published by other organizations and **publish** tools of your own to earn USDC per call.
+
+---
+
+### Browsing & Subscribing (consumers)
+
+No authentication required to browse.
+
+```bash
+# List all published tools
+teardrop marketplace list
+teardrop marketplace list --category data --json
+
+# Search by keyword (client-side filter across name + description)
+teardrop marketplace search "weather"
+teardrop marketplace search "onchain price feed"
+
+# Inspect a tool's schema and pricing before subscribing
+teardrop marketplace info acme/weather
+
+# Subscribe your org (one-time confirmation prompt)
+teardrop marketplace subscribe acme/weather
+teardrop marketplace subscribe acme/weather --yes    # skip confirmation
+
+# View your active subscriptions
+teardrop marketplace subscriptions
+teardrop marketplace subscriptions --json
+
+# Unsubscribe
+teardrop marketplace unsubscribe acme/weather
+```
+
+Once subscribed, the tool is immediately available to your agent — no restart required.
+
+---
+
+### Publishing a Tool (publishers)
+
+#### Interactive wizard
+
+```bash
+teardrop tools publish
+```
+
+The wizard prompts for name, description, webhook URL, timeout, price, and input schema. It also asks whether to list the tool on the public marketplace.
+
+#### From a JSON spec file (recommended for CI/CD)
+
+```bash
+teardrop tools publish --from-file tool.json
+```
+
+Example `tool.json`:
+
+```json
+{
+  "name": "get_weather",
+  "description": "Fetch current weather conditions for a given city.",
+  "webhook_url": "https://api.example.com/webhooks/teardrop",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "city": { "type": "string", "description": "City name, e.g. 'London'" }
+    },
+    "required": ["city"]
+  },
+  "timeout_seconds": 10,
+  "publish_as_mcp": true,
+  "marketplace_description": "Real-time weather data for any city worldwide.",
+  "base_price_usdc": 5000
+}
+```
+
+> `base_price_usdc` is in atomic USDC units (6 decimal places): `5000` = **$0.005000** per call.
+
+**Tool name rules:** lowercase letters, digits, and underscores only; must start with a letter; maximum 64 characters (`^[a-z][a-z0-9_]*$`).
+
+#### Set your settlement wallet (required before first payout)
+
+Pass `--settlement-wallet` at publish time to register the EIP-55 checksum address where marketplace earnings are sent:
+
+```bash
+teardrop tools publish \
+  --from-file tool.json \
+  --settlement-wallet 0xYourChecksumAddress
+```
+
+You only need to do this once. To update it later, re-run publish with the new address.
+
+#### Manage existing tools
+
+```bash
+# List all org tools
 teardrop tools list
 teardrop tools list --json
 
-# Show a tool's schema and optionally validate input
-teardrop tools test <tool-id>
-teardrop tools test <tool-id> --input '{"param": "value"}'
+# Inspect a tool's full schema and configuration
+teardrop tools info get_weather
+
+# Update individual fields (only supplied flags are changed)
+teardrop tools update get_weather --price 0.003
+teardrop tools update get_weather --description "Updated description" --publish
+
+# Pause (disable) a tool — subscribers lose access until re-enabled
+teardrop tools pause get_weather
+teardrop tools update get_weather --active    # re-enable
+
+# Delete a tool permanently
+teardrop tools delete get_weather
+teardrop tools delete get_weather --yes    # skip confirmation
 ```
 
-`--input` performs local validation: checks required fields are present and types match the schema before any network call.
+---
+
+### Earnings & Withdrawals (publishers)
+
+```bash
+# Marketplace earnings balance
+teardrop earnings balance
+teardrop earnings balance --json
+
+# Per-call earnings history
+teardrop earnings history
+teardrop earnings history --limit 50 --tool get_weather
+teardrop earnings history --json
+
+# Withdraw to your settlement wallet
+teardrop earnings withdraw 10.00             # prompts for confirmation
+teardrop earnings withdraw 10.00 --yes       # skip confirmation
+
+# Withdrawal history
+teardrop earnings withdrawals
+teardrop earnings withdrawals --limit 20 --json
+```
+
+Withdrawals are processed on-chain. Funds typically arrive within 1–5 minutes.
 
 ---
 
 ## LLM Configuration
 
-Configure organization-level LLM settings, including model selection, routing preference, and bring-your-own-key (BYOK) support.
+Configure the model, routing strategy, and API key used by your org's agents. Settings are applied globally across all agent runs.
+
+### Get and delete
 
 ```bash
-# Get current config
-teardrop llm-config get org-1
-teardrop llm-config get org-1 --json
+# Show current configuration (cached for 5 minutes)
+teardrop llm-config get
+teardrop llm-config get --json
+teardrop llm-config get --no-cache    # force refresh
 
-# Set config with provider and model
-teardrop llm-config set org-1 \
-  --provider anthropic \
-  --model claude-haiku-4-5-20251001
+# Revert to platform global defaults
+teardrop llm-config delete
+teardrop llm-config delete --yes      # skip confirmation
+```
 
-# Set with routing preference
-teardrop llm-config set org-1 \
+### Set model and routing
+
+```bash
+# Select provider and model
+teardrop llm-config set --provider anthropic --model claude-haiku-4-5-20251001
+
+# Route calls by cost, speed, or quality
+teardrop llm-config set \
   --provider anthropic \
   --model claude-haiku-4-5-20251001 \
   --routing cost
 
-# Set advanced options
-teardrop llm-config set org-1 \
+# Advanced tuning
+teardrop llm-config set \
   --provider openai \
   --model gpt-4o \
   --max-tokens 8000 \
   --temperature 0.7 \
   --timeout-seconds 60
-
-# Bring-your-own-key (BYOK)
-teardrop llm-config set org-1 \
-  --provider openai \
-  --model gpt-4o \
-  --byok-key $OPENAI_API_KEY
-
-# Read key from stdin (more secure)
-cat $key_file | teardrop llm-config set org-1 \
-  --provider openai \
-  --model gpt-4o \
-  --byok-key -
-
-# Self-hosted model
-teardrop llm-config set org-1 \
-  --provider openai \
-  --model llama2-70b \
-  --api-base https://gpu-cluster.internal.example.com:8000/v1 \
-  --byok-key $LOCAL_TOKEN
-
-# Rotate API key
-teardrop llm-config set org-1 \
-  --provider anthropic \
-  --model claude-sonnet-4-20250514 \
-  --rotate-key
-
-# Delete custom config (revert to global defaults)
-teardrop llm-config delete org-1
-teardrop llm-config delete org-1 --yes    # skip confirm
 ```
 
 **Supported providers:** `anthropic`, `openai`, `google`, `openrouter`
 
-**Routing preferences:** `default`, `cost`, `speed`, `quality`
+**Routing preferences:** `default` · `cost` · `speed` · `quality`
 
-**Validation:**
-- Temperature: 0.0–2.0
-- Max tokens: 1–200,000
-- Timeout: ≥ 1 second
-- API key handling: keys sent only over TLS; warnings shown for insecure practices
+**Validation:** temperature 0.0–2.0 · max tokens 1–200,000 · timeout ≥ 1 s
 
-**Caching:**
-- Config is cached locally for 5 minutes; use `--no-cache` to force refresh
+### Bring-your-own-key (BYOK)
+
+Use your own provider API key — Teardrop's shared key is bypassed entirely.
+
+```bash
+# Inline (key visible in shell history — acceptable for non-sensitive dev use)
+teardrop llm-config set \
+  --provider openai \
+  --model gpt-4o \
+  --byok-key $OPENAI_API_KEY
+
+# Secure stdin pipe (key never appears in history or process list)
+# macOS / Linux
+cat "$key_file" | teardrop llm-config set \
+  --provider openai \
+  --model gpt-4o \
+  --byok-key -
+
+# Windows (PowerShell)
+Get-Content "$key_file" | teardrop llm-config set `
+  --provider openai `
+  --model gpt-4o `
+  --byok-key -
+
+# Remove BYOK key and revert to platform shared key
+teardrop llm-config set --provider openai --model gpt-4o --clear-key
+```
+
+### Self-hosted model
+
+Point the CLI at any OpenAI-compatible endpoint:
+
+```bash
+teardrop llm-config set \
+  --provider openai \
+  --model llama3-70b \
+  --api-base https://gpu-cluster.internal.example.com:8000/v1 \
+  --byok-key $LOCAL_TOKEN
+```
+
+The `--api-base` URL must be HTTPS. A warning is shown if it is not.
+
+---
+
+## MCP Servers
+
+Attach external [Model Context Protocol](https://modelcontextprotocol.io) servers to your org. Any tools they expose become available to your agents automatically.
+
+```bash
+# List connected servers
+teardrop mcp list
+teardrop mcp list --json
+
+# Add a server
+teardrop mcp add --name "my-server" --url https://mcp.example.com
+teardrop mcp add --name "secure" --url https://mcp.example.com \
+  --auth-type bearer --auth-token <token>
+
+# Inspect the tools a server exposes
+teardrop mcp discover <server-id>
+
+# Remove a server
+teardrop mcp remove <server-id>
+teardrop mcp remove <server-id> --yes    # skip confirmation
+```
 
 ---
 
 ## Models & Benchmarks
 
-View the model catalogue with performance metrics and discover your organization's actual usage.
-
 ```bash
-# Public model benchmarks (no auth required)
+# Public catalogue — no authentication required
 teardrop models benchmarks
 teardrop models benchmarks --json
+teardrop models benchmarks --no-cache    # bypass 10-minute local cache
 
-# Organization-scoped metrics (auth required)
-teardrop models benchmarks --org org-1
-teardrop models benchmarks --org org-1 --json
-
-# Bypass cache
-teardrop models benchmarks --no-cache
-teardrop models benchmarks --org org-1 --force-refresh
+# Your org's actual performance metrics (authentication required)
+teardrop models benchmarks --org <org-id>
+teardrop models benchmarks --org <org-id> --force-refresh
 ```
 
-The public benchmark table shows:
-- Model identifiers and display names
-- Quality tier (1–3)
-- P95 latency (ms)
-- Pricing (cost per 1k tokens in/out)
-- 7-day usage stats (total runs)
-
-Organization-scoped metrics show your org's actual performance:
-- Number of runs
-- Average latency
-- Average cost per run
-- Total cost (7-day sum)
-- Tokens per second
-
-**Caching:**
-- Public benchmarks: 10 minutes local cache
-- Organization benchmarks: always fresh (no cache)
+The public table shows quality tier, P95 latency, per-token pricing, and 7-day run volume. The org-scoped table shows your average latency, cost per run, and tokens per second.
 
 ---
 
-## Configuration
+## Configuration File
 
-The config file lives at the platform-appropriate path (e.g., `~/.config/teardrop/config.toml` on Linux/macOS). It is created automatically on first login and restricted to owner-read (`0o600` on POSIX).
+Config is stored at `~/.teardrop/config.toml` and created automatically on first login. The file is restricted to owner read/write (`0600` on POSIX). Sensitive secrets (passwords, tokens) are stored in the **system keyring**, not in the file.
 
-Sensitive secrets (passwords, tokens) are stored in the **system keyring**; only non-secret fields (email, client_id) are written to the config file.
+### Read and write config values
 
-```toml
-# ~/.config/teardrop/config.toml
-base_url = "https://api.teardrop.dev"   # optional override
+```bash
+# Show all stored values (tokens redacted to first 12 characters)
+teardrop config list
+teardrop config list --json
+
+# Read or write a single key
+teardrop config get api_url
+teardrop config set api_url https://api.teardrop.ai
+
+# Create the config file explicitly (useful for bootstrap scripts)
+teardrop init
+teardrop init --base-url https://api.teardrop.ai
 ```
+
+Writable keys: `api_url`, `email`, `org_id`. Tokens and secrets are managed only via `auth login` and `auth logout`.
 
 ---
 
 ## Development
-
-To contribute to `teardrop-cli`, clone the repository and install in editable mode with dev dependencies:
 
 ```bash
 git clone https://github.com/teardrop-ai/teardrop-cli
@@ -307,21 +446,45 @@ cd teardrop-cli
 pip install -e ".[dev]"
 ```
 
-Run tests:
+### Test tiers
+
+| Command | What runs | Network required |
+|---------|-----------|-----------------|
+| `pytest` | Unit tests + smoke tests + perf assertions | No |
+| `pytest -m smoke` | Subprocess-based hermetic smoke tests only | No |
+| `pytest -m perf` | Startup performance assertions only | No |
+| `pytest -m e2e` | Live API tests (skipped without credentials) | Yes |
+
+**Run unit + smoke tests (default):**
 
 ```bash
 pytest
 ```
 
-Lint and format:
+**Run live end-to-end tests:**
+
+```bash
+# Token auth
+TEARDROP_E2E=1 TEARDROP_E2E_TOKEN=<jwt> pytest -m e2e
+
+# Email + secret auth
+TEARDROP_E2E=1 TEARDROP_E2E_EMAIL=you@example.com TEARDROP_E2E_SECRET=•••• pytest -m e2e
+```
+
+See [`tests/e2e/README.md`](tests/e2e/README.md) for the full environment variable reference and per-test descriptions.
+
+**Lint and format:**
 
 ```bash
 ruff check src tests
 ruff format src tests
 ```
 
-**Testing utilities** in `src/teardrop_cli/_fixtures.py`:
-- `make_jwt_payload(sub, org, role)` — mock JWT payload
-- `make_sse_events(text)` — mock SSE event sequence (text chunk → usage → done)
+**Test fixtures** in `src/teardrop_cli/_fixtures.py`:
 
-All async tests use `asyncio_mode = "auto"` (configured in `pyproject.toml`).
+| Helper | Returns |
+|--------|---------|
+| `make_jwt_payload(sub, org, role)` | Mock JWT payload |
+| `make_sse_events(text)` | SSE event sequence (text chunk → usage → done) |
+| `make_llm_config(...)` | Mock `OrgLlmConfig` |
+| `make_benchmarks_response(models)` | Mock benchmarks response |

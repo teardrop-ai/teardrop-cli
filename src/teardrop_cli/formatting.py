@@ -117,14 +117,39 @@ def print_json_or_table(
 # Streaming agent response renderer
 # ---------------------------------------------------------------------------
 
-# SSE event type constants (mirrors teardrop_sdk)
-_EV_TEXT = "text_msg_content"
-_EV_TOOL_START = "tool_call_start"
-_EV_TOOL_END = "tool_call_end"
-_EV_USAGE = "usage_summary"
-_EV_BILLING = "billing_settlement"
-_EV_ERROR = "error"
-_EV_DONE = "done"
+# SSE event type constants — prefer values exported by the SDK so the CLI
+# stays in sync with backend wire format. Fall back to UPPERCASE strings used
+# by the spec when the SDK does not yet expose constants.
+try:  # pragma: no cover - import shape varies across SDK versions
+    from teardrop.streaming import (  # type: ignore
+        EVENT_BILLING_SETTLEMENT as _EV_BILLING,
+    )
+    from teardrop.streaming import (
+        EVENT_DONE as _EV_DONE,
+    )
+    from teardrop.streaming import (
+        EVENT_ERROR as _EV_ERROR,
+    )
+    from teardrop.streaming import (
+        EVENT_TEXT_MSG_CONTENT as _EV_TEXT,
+    )
+    from teardrop.streaming import (
+        EVENT_TOOL_CALL_END as _EV_TOOL_END,
+    )
+    from teardrop.streaming import (
+        EVENT_TOOL_CALL_START as _EV_TOOL_START,
+    )
+    from teardrop.streaming import (
+        EVENT_USAGE_SUMMARY as _EV_USAGE,
+    )
+except ImportError:  # pragma: no cover
+    _EV_TEXT = "TEXT_MESSAGE_CONTENT"
+    _EV_TOOL_START = "TOOL_CALL_START"
+    _EV_TOOL_END = "TOOL_CALL_END"
+    _EV_USAGE = "USAGE_SUMMARY"
+    _EV_BILLING = "BILLING_SETTLEMENT"
+    _EV_ERROR = "ERROR"
+    _EV_DONE = "DONE"
 
 
 def stream_agent_response(events: AsyncIterator) -> None:  # type: ignore[type-arg]

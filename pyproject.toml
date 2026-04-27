@@ -41,6 +41,9 @@ dev = [
     "ruff>=0.4",
     "hatch>=1.12",
 ]
+e2e = [
+    "pytest-timeout>=2.3",
+]
 
 [project.scripts]
 teardrop = "teardrop_cli.cli:app"
@@ -59,7 +62,12 @@ packages = ["src/teardrop_cli"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-v"
+addopts = ["-v", "-m", "not e2e"]
+markers = [
+    "e2e: live integration tests requiring TEARDROP_E2E=1 and real credentials",
+    "smoke: hermetic subprocess-based tests (no network)",
+    "perf: performance assertions",
+]
 
 [tool.ruff]
 line-length = 99

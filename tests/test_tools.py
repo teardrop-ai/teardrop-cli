@@ -1,88 +1,121 @@
-"""Tests for tools commands."""
+"""Tests for org tools commands."""
 
 from __future__ import annotations
 
-import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
-from typer.testing import CliRunner
+from click.testing import CliRunner
 
 from teardrop_cli.cli import app
 
 
-class TestToolsList:
+def _tool_obj(name="my_tool", tool_id="tool_1", **extra):
+    data = {
+        "id": tool_id,
+        "name": name,
+        "description": "desc",
+        "is_active": True,
+        "publish_as_mcp": False,
+        "webhook_url": "https://hook.example.com/run",
+        **extra,
+    }
+    obj = MagicMock(spec=[])
+    obj.id = tool_id
+    obj.name = name  # explicit set since `name` is reserved on MagicMock ctor
+    obj.model_dump = lambda: dict(data)
+    return obj
+
+
+class TestList:
     def test_list_empty(self, runner: CliRunner, patch_get_client):
         result = runner.invoke(app, ["tools", "list"])
         assert result.exit_code == 0, result.output
 
     def test_list_with_tools(self, runner: CliRunner, patch_get_client, mock_client):
-        t = MagicMock()
-        t.id = "tool_1"
-        t.name = "my-tool"
-        t.description = "Does stuff"
-        t.type = "function"
-        t.model_dump = lambda: {"id": "tool_1", "name": "my-tool"}
-        mock_client.list_tools = AsyncMock(return_value=[t])
-
+        mock_client.list_tools.return_value = [_tool_obj()]
         result = runner.invoke(app, ["tools", "list"])
         assert result.exit_code == 0, result.output
-        assert "tool_1" in result.output
-
-    def test_list_json(self, runner: CliRunner, patch_get_client, mock_client):
-        t = MagicMock()
-        t.id = "tool_1"
-        t.name = "my-tool"
-        t.description = "Does stuff"
-        t.type = "function"
-        t.model_dump = lambda: {"id": "tool_1", "name": "my-tool"}
-        mock_client.list_tools = AsyncMock(return_value=[t])
-
-        result = runner.invoke(app, ["tools", "list", "--json"])
-        assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert isinstance(data, list)
-        assert data[0]["id"] == "tool_1"
+        assert "my_tool" in result.output
 
 
-class TestToolsTest:
-    def test_test_tool_table(self, runner: CliRunner, patch_get_client):
-        result = runner.invoke(app, ["tools", "test", "tool_1"])
-        assert result.exit_code == 0, result.output
-        assert "tool_1" in result.output
+class TestInfo:
+    def test_info_not_found(self, runner: CliRunner, patch_get_client):
+        result = runner.invoke(app, ["tools", "info", "missing"])
+        assert result.exit_code == 1
 
-    def test_test_tool_json(self, runner: CliRunner, patch_get_client):
-        result = runner.invoke(app, ["tools", "test", "tool_1", "--json"])
-        assert result.exit_code == 0
-        data = json.loads(result.output)
-        assert data["id"] == "tool_1"
-
-    def test_test_tool_valid_input(self, runner: CliRunner, patch_get_client):
-        result = runner.invoke(
-            app,
-            ["tools", "test", "tool_1", "--input", '{"query": "hello"}'],
-        )
+    def test_info_found(self, runner: CliRunner, patch_get_client, mock_client):
+        mock_client.list_tools.return_value = [_tool_obj()]
+        result = runner.invoke(app, ["tools", "info", "my_tool"])
         assert result.exit_code == 0, result.output
 
-    def test_test_tool_missing_required(self, runner: CliRunner, patch_get_client):
-        """Missing required field should exit non-zero."""
-        result = runner.invoke(
-            app,
-            ["tools", "test", "tool_1", "--input", "{}"],
-        )
+
+class TestPublish:
+    def test_publish_from_file(
+        self, runner: CliRunner, patch_get_client, mock_client, tmp_path
+    ):
+        import json
+
+        spec = {
+            "name": "my_tool",
+            "description": "A tool",
+            "webhook_url": "https://hook.example.com/run",
+            "input_schema": {"type": "object", "properties": {}},
+            "timeout_seconds": 10,
+            "publish_as_mcp": False,
+        }
+        path = tmp_path / "tool.json"
+        path.write_text(json.dumps(spec), encoding="utf-8")
+
+        result = runner.invoke(app, ["tools", "publish", "--from-file", str(path)])
+        assert result.exit_code == 0, result.output
+        mock_client.create_tool.assert_awaited()
+
+    def test_publish_invalid_name(
+        self, runner: CliRunner, patch_get_client, tmp_path
+    ):
+        import json
+
+        spec = {
+            "name": "Bad-Name",  # invalid: uppercase + hyphen
+            "description": "A tool",
+            "webhook_url": "https://hook.example.com/run",
+            "input_schema": {"type": "object"},
+        }
+        path = tmp_path / "tool.json"
+        path.write_text(json.dumps(spec), encoding="utf-8")
+
+        result = runner.invoke(app, ["tools", "publish", "--from-file", str(path)])
         assert result.exit_code == 1
 
-    def test_test_tool_invalid_json(self, runner: CliRunner, patch_get_client):
-        """Malformed JSON input exits with code 1."""
-        result = runner.invoke(
-            app,
-            ["tools", "test", "tool_1", "--input", "{not-json}"],
-        )
+
+class TestUpdate:
+    def test_update_no_flags(self, runner: CliRunner, patch_get_client, mock_client):
+        mock_client.list_tools.return_value = [_tool_obj()]
+        result = runner.invoke(app, ["tools", "update", "my_tool"])
         assert result.exit_code == 1
 
-    def test_test_tool_wrong_type(self, runner: CliRunner, patch_get_client):
-        """Wrong field type should exit with code 1."""
+    def test_update_description(
+        self, runner: CliRunner, patch_get_client, mock_client
+    ):
+        mock_client.list_tools.return_value = [_tool_obj()]
         result = runner.invoke(
-            app,
-            ["tools", "test", "tool_1", "--input", '{"query": 123}'],
+            app, ["tools", "update", "my_tool", "--description", "new"]
         )
-        assert result.exit_code == 1
+        assert result.exit_code == 0, result.output
+        mock_client.update_tool.assert_awaited()
+
+
+class TestPause:
+    def test_pause(self, runner: CliRunner, patch_get_client, mock_client):
+        mock_client.list_tools.return_value = [_tool_obj()]
+        result = runner.invoke(app, ["tools", "pause", "my_tool"])
+        assert result.exit_code == 0, result.output
+        mock_client.update_tool.assert_awaited()
+
+
+class TestDelete:
+    def test_delete_with_yes(self, runner: CliRunner, patch_get_client, mock_client):
+        mock_client.list_tools.return_value = [_tool_obj()]
+        result = runner.invoke(app, ["tools", "delete", "my_tool", "--yes"])
+        assert result.exit_code == 0, result.output
+        mock_client.delete_tool.assert_awaited()

@@ -19,9 +19,9 @@ _SUPPORTED_ROUTINGS = ["default", "cost", "speed", "quality"]
 
 
 def _mask_api_key(key: str) -> str:
-    """Return first 5 chars of *key* followed by bullet ellipsis."""
-    prefix = key[:5] if len(key) >= 5 else key
-    return f"{prefix}••••"
+    """Return first 6 chars of *key* followed by ``•••••``."""
+    prefix = key[:6] if len(key) >= 6 else key
+    return f"{prefix}•••••"
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +31,6 @@ def _mask_api_key(key: str) -> str:
 
 @app.command()
 def get(
-    org_id: Annotated[str, typer.Argument(help="Organisation ID.")],
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     no_cache: Annotated[
         bool,
@@ -46,22 +45,24 @@ def get(
     from teardrop_cli.formatting import print_error, print_json, print_table, spinner
 
     client = config.get_client(base_url)
+    if no_cache:
+        # Bypass SDK in-process cache
+        try:
+            client._llm_config_cache = None  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+    async def _fetch():
+        try:
+            return await client.get_llm_config()
+        finally:
+            await client.close()
 
     try:
-
-        async def _fetch():
-            try:
-                return await client.get_llm_config(org_id=org_id, no_cache=no_cache)
-            finally:
-                await client.close()
-
         with spinner("Fetching LLM config…"):
             cfg = asyncio.run(_fetch())
     except AuthenticationError:
-        print_error(
-            "Not authenticated.",
-            hint="Run: `teardrop auth login`",
-        )
+        print_error("Not authenticated.", hint="Run: `teardrop auth login`")
         raise typer.Exit(1) from None
     except Exception as exc:
         _handle_common_error(exc)
@@ -72,33 +73,21 @@ def get(
         print_json(data)
         return
 
-    # Check for 404-equivalent (no custom config)
-    if not data:
-        from teardrop_cli.formatting import console
-
-        console.print(
-            f"[dim]No custom LLM config found for {org_id}. Using global defaults.[/dim]"
-        )
-        return
-
-    api_key_display = "true" if data.get("has_api_key") else "false"
-
     print_table(
         [("Field", {"style": "bold cyan"}), "Value"],
         [
             ["Provider", data.get("provider", "—")],
             ["Model", data.get("model", "—")],
-            ["API Key Set", api_key_display],
+            ["API Key Set", "true" if data.get("has_api_key") else "false"],
             ["Self-Hosted URL", data.get("api_base") or "(none)"],
             ["Max Tokens", data.get("max_tokens", "—")],
             ["Temperature", data.get("temperature", "—")],
             ["Timeout", f"{data.get('timeout_seconds', '—')}s"],
             ["Routing Preference", data.get("routing_preference", "—")],
-            ["Is BYOK", str(data.get("is_byok", False))],
-            ["Created", data.get("created_at", "—")],
+            ["BYOK", "true" if data.get("is_byok") else "false"],
             ["Updated", data.get("updated_at", "—")],
         ],
-        title=f"LLM Config — {org_id}",
+        title="LLM Config",
     )
 
 
@@ -109,7 +98,6 @@ def get(
 
 @app.command(name="set")
 def set_config(
-    org_id: Annotated[str, typer.Argument(help="Organisation ID.")],
     provider: Annotated[
         str | None,
         typer.Option("--provider", help="LLM provider (anthropic, openai, google, openrouter)."),
@@ -135,14 +123,19 @@ def set_config(
         str | None,
         typer.Option("--byok-key", help="Bring-your-own API key. Pass '-' to read from stdin."),
     ] = None,
-    rotate_key: Annotated[
+    clear_key: Annotated[
         bool,
-        typer.Option("--rotate-key", help="Rotate the existing API key (delete + re-add)."),
+        typer.Option("--clear-key", help="Clear BYOK key (revert to platform shared key)."),
     ] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
-    """Create or update the org's LLM configuration."""
+    """Create or update the org's LLM configuration.
+
+    Performs a read-then-write merge: any field not supplied is taken from
+    the current configuration. ``provider`` and ``model`` are always
+    required by the backend, so they are merged from the existing config.
+    """
     from teardrop import AuthenticationError
 
     from teardrop_cli import config
@@ -155,88 +148,90 @@ def set_config(
         spinner,
     )
 
-    # ------------------------------------------------------------------
     # Client-side validation
-    # ------------------------------------------------------------------
     if provider is not None and provider not in _SUPPORTED_PROVIDERS:
         print_error(
             f"Unsupported provider: {provider!r}.",
             hint=f"Supported: {', '.join(_SUPPORTED_PROVIDERS)}",
         )
         raise typer.Exit(1)
-
     if routing is not None and routing not in _SUPPORTED_ROUTINGS:
         print_error(
             f"Invalid routing preference: {routing!r}.",
             hint=f"Supported: {', '.join(_SUPPORTED_ROUTINGS)}",
         )
         raise typer.Exit(1)
-
     if temperature is not None and not (0.0 <= temperature <= 2.0):
         print_error("Temperature must be 0.0–2.0.")
         raise typer.Exit(1)
-
     if max_tokens is not None and not (1 <= max_tokens <= 200_000):
         print_error("Max tokens must be 1–200,000.")
         raise typer.Exit(1)
-
     if timeout_seconds is not None and timeout_seconds < 1:
         print_error("timeout-seconds must be ≥ 1.")
         raise typer.Exit(1)
 
-    # ------------------------------------------------------------------
     # BYOK key resolution
-    # ------------------------------------------------------------------
     resolved_key: str | None = None
-
     if byok_key == "-":
-        # Read from stdin
         resolved_key = sys.stdin.read().strip()
     elif byok_key is not None:
-        print_warning("API key passed as argument. Consider using stdin for better security.")
-        print_warning("Example: cat $key_file | teardrop llm-config set ... --byok-key -")
+        print_warning(
+            "API key visible in shell history. Prefer: --byok-key - (read from stdin)"
+        )
         resolved_key = byok_key
 
-    # Warn if sending a key over a non-HTTPS api_base
     if resolved_key and api_base and not api_base.startswith("https://"):
         print_warning("api-base is not HTTPS. API keys must only be sent over TLS.")
 
-    # ------------------------------------------------------------------
-    # API call
-    # ------------------------------------------------------------------
+    if clear_key and resolved_key:
+        print_error("--clear-key cannot be combined with --byok-key.")
+        raise typer.Exit(1)
+
     client = config.get_client(base_url)
 
-    kwargs: dict = {"org_id": org_id}
-    if provider is not None:
-        kwargs["provider"] = provider
-    if model is not None:
-        kwargs["model"] = model
-    if routing is not None:
-        kwargs["routing_preference"] = routing
-    if api_base is not None:
-        kwargs["api_base"] = api_base
-    if max_tokens is not None:
-        kwargs["max_tokens"] = max_tokens
-    if temperature is not None:
-        kwargs["temperature"] = temperature
-    if timeout_seconds is not None:
-        kwargs["timeout_seconds"] = timeout_seconds
-    if rotate_key:
-        kwargs["rotate_key"] = True
-    # resolved_key may be None — server preserves existing key when omitted
-    if resolved_key is not None:
-        kwargs["api_key"] = resolved_key
+    # Read current config for merging
+    try:
+        current = asyncio.run(_get_current(client))
+    except AuthenticationError:
+        print_error("Not authenticated.", hint="Run: `teardrop auth login`")
+        raise typer.Exit(1) from None
+
+    cur = current if isinstance(current, dict) else current.model_dump()
+
+    merged = {
+        "provider": provider or cur.get("provider"),
+        "model": model or cur.get("model"),
+        "routing_preference": routing or cur.get("routing_preference") or "default",
+        "api_base": api_base if api_base is not None else cur.get("api_base"),
+        "max_tokens": max_tokens or cur.get("max_tokens") or 4096,
+        "temperature": (
+            temperature if temperature is not None else (cur.get("temperature") or 0.0)
+        ),
+        "timeout_seconds": timeout_seconds or cur.get("timeout_seconds") or 120,
+    }
+
+    if not merged["provider"] or not merged["model"]:
+        print_error(
+            "provider and model are required (no current config to merge from).",
+            hint="Specify --provider and --model.",
+        )
+        raise typer.Exit(1)
+
+    async def _apply():
+        try:
+            if clear_key:
+                return await client.clear_llm_api_key(**merged)
+            kwargs = dict(merged)
+            if resolved_key is not None:
+                kwargs["api_key"] = resolved_key
+            return await client.set_llm_config(**kwargs)
+        finally:
+            await client.close()
 
     try:
-
-        async def _fetch():
-            try:
-                return await client.set_llm_config(**kwargs)
-            finally:
-                await client.close()
-
         with spinner("Updating LLM config…"):
-            cfg = asyncio.run(_fetch())
+            cfg = asyncio.run(_apply())
     except AuthenticationError:
         print_error("Not authenticated.", hint="Run: `teardrop auth login`")
         raise typer.Exit(1) from None
@@ -246,12 +241,11 @@ def set_config(
     data = cfg if isinstance(cfg, dict) else cfg.model_dump()
 
     if as_json:
-        # Never include raw api_key in output
         data.pop("api_key", None)
         print_json(data)
         return
 
-    print_success(f"Updated LLM configuration for {org_id}")
+    print_success("Updated LLM configuration")
     summary_rows: list[list] = [
         ["Provider", data.get("provider", "—")],
         ["Model", data.get("model", "—")],
@@ -260,15 +254,18 @@ def set_config(
     if data.get("api_base"):
         summary_rows.append(["Self-Hosted URL", data["api_base"]])
     if data.get("has_api_key"):
-        key_display = f"true ({_mask_api_key(resolved_key)})" if resolved_key else "true"
+        key_display = (
+            f"true ({_mask_api_key(resolved_key)})" if resolved_key else "true"
+        )
         summary_rows.append(["API Key Set", key_display])
     if data.get("is_byok"):
-        summary_rows.append(["Is BYOK", "true"])
+        summary_rows.append(["BYOK", "true"])
 
-    print_table(
-        [("Field", {"style": "bold cyan"}), "Value"],
-        summary_rows,
-    )
+    print_table([("Field", {"style": "bold cyan"}), "Value"], summary_rows)
+
+
+async def _get_current(client):
+    return await client.get_llm_config()
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +275,6 @@ def set_config(
 
 @app.command()
 def delete(
-    org_id: Annotated[str, typer.Argument(help="Organisation ID.")],
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")] = False,
     base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
@@ -290,31 +286,29 @@ def delete(
 
     if not yes:
         confirmed = confirm(
-            f"Delete custom LLM config for {org_id}? This will revert to global defaults."
+            "Delete custom LLM config? This will revert to global defaults."
         )
         if not confirmed:
             raise typer.Abort()
 
     client = config.get_client(base_url)
 
+    async def _fetch():
+        try:
+            await client.delete_llm_config()
+        finally:
+            await client.close()
+
     try:
-
-        async def _fetch():
-            try:
-                await client.delete_llm_config(org_id=org_id)
-            finally:
-                await client.close()
-
         with spinner("Deleting LLM config…"):
             asyncio.run(_fetch())
     except AuthenticationError:
         print_error("Not authenticated.", hint="Run: `teardrop auth login`")
         raise typer.Exit(1) from None
     except Exception as exc:
-        # 404 is treated as success (already using defaults)
         _handle_common_error(exc, not_found_ok=True)
 
-    print_success("Deleted")
+    print_success("Deleted. Using global defaults.")
 
 
 # ---------------------------------------------------------------------------
@@ -324,22 +318,18 @@ def delete(
 
 def _handle_common_error(exc: Exception, *, not_found_ok: bool = False) -> None:
     """Translate SDK/HTTP exceptions to user-friendly messages."""
-    from teardrop_cli.formatting import console, print_error, print_success
+    from teardrop_cli.formatting import print_error, print_success
 
     exc_str = str(exc)
     status = getattr(exc, "status_code", None) or getattr(exc, "status", None)
 
     if not_found_ok and status == 404:
-        print_success("No config found (already using defaults).")
-        return
+        print_success("No custom config found. Already using global defaults.")
+        raise typer.Exit(0)
 
     if status == 401:
         print_error("Not authenticated.", hint="Run: `teardrop auth login`")
         raise typer.Exit(1)
-
-    if status == 404:
-        console.print("[dim]No custom LLM config found. Using global defaults.[/dim]")
-        raise typer.Exit(0)
 
     if status == 400:
         if "ssrf" in exc_str.lower() or "private" in exc_str.lower():
@@ -366,10 +356,13 @@ def _handle_common_error(exc: Exception, *, not_found_ok: bool = False) -> None:
         raise typer.Exit(1)
 
     if status == 429:
-        print_error(
-            "Too many config updates.",
-            hint="Maximum 10 updates per hour per org.",
+        retry = getattr(exc, "retry_after", None)
+        hint = (
+            f"Maximum 10 updates per hour per org. Retry in {retry}s."
+            if retry
+            else "Maximum 10 updates per hour per org."
         )
+        print_error("Too many config updates.", hint=hint)
         raise typer.Exit(1)
 
     print_error(f"Unexpected error: {exc_str}")

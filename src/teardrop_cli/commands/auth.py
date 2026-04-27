@@ -1,19 +1,20 @@
-"""auth commands: login, logout, whoami."""
+"""auth commands: login, login --siwe, status, logout."""
 
 from __future__ import annotations
 
 import asyncio
 import os
-from datetime import UTC
+from datetime import UTC, datetime
 from typing import Annotated
 
 import typer
 
 app = typer.Typer(
     name="auth",
-    help="Authentication — login, logout, and identity.",
+    help="Authentication — login, status, and logout.",
     no_args_is_help=True,
 )
+
 
 # ---------------------------------------------------------------------------
 # login
@@ -23,9 +24,13 @@ app = typer.Typer(
 @app.command()
 def login(
     email: Annotated[str | None, typer.Option("--email", "-e", help="Email address.")] = None,
+    password: Annotated[
+        str | None,
+        typer.Option("--password", "-p", help="Password.", hide_input=True),
+    ] = None,
     secret: Annotated[
         str | None,
-        typer.Option("--secret", "-s", help="Password / secret.", hide_input=True),
+        typer.Option("--secret", "-s", help="(Alias of --password.)", hide_input=True),
     ] = None,
     client_id: Annotated[str | None, typer.Option("--client-id", help="M2M client ID.")] = None,
     client_secret: Annotated[
@@ -38,7 +43,8 @@ def login(
     ] = None,
     siwe: Annotated[bool, typer.Option("--siwe", help="Sign in with Ethereum wallet.")] = False,
     base_url: Annotated[
-        str | None, typer.Option("--base-url", help="Override the API base URL.", hidden=True)
+        str | None,
+        typer.Option("--base-url", help="Override the API base URL.", hidden=True),
     ] = None,
 ) -> None:
     """Authenticate with the Teardrop API and store credentials locally."""
@@ -48,73 +54,90 @@ def login(
     from teardrop_cli.formatting import print_success, spinner
 
     url = base_url or config.get_base_url()
+    password = password or secret  # accept either flag name
 
-    # ------------------------------------------------------------------ #
-    # Static token                                                         #
-    # ------------------------------------------------------------------ #
+    # Static token
     if token:
         config.store_token(token)
-        print_success("Token stored. Run [bold]teardrop auth whoami[/bold] to verify.")
+        print_success("Token stored. Run [bold]teardrop auth status[/bold] to verify.")
         return
 
-    # ------------------------------------------------------------------ #
-    # SIWE (Sign-In With Ethereum)                                         #
-    # ------------------------------------------------------------------ #
+    # SIWE
     if siwe:
         _login_siwe(url)
         return
 
-    # ------------------------------------------------------------------ #
-    # Client credentials (M2M)                                             #
-    # ------------------------------------------------------------------ #
+    # Client credentials (M2M)
     if client_id or client_secret:
         if not client_id:
             client_id = typer.prompt("Client ID")
         if not client_secret:
             client_secret = typer.prompt("Client secret", hide_input=True)
 
-        async def _fetch_client_creds():
+        client = AsyncTeardropClient(url, client_id=client_id, client_secret=client_secret)
+
+        async def _fetch():
             try:
                 return await client.get_me()
             finally:
                 await client.close()
 
         with spinner("Authenticating…"):
-            client = AsyncTeardropClient(url, client_id=client_id, client_secret=client_secret)
             try:
-                me = asyncio.run(_fetch_client_creds())
+                me = asyncio.run(_fetch())
             except Exception as exc:
                 _handle_auth_error(exc)
                 return
 
         config.store_client_credentials(client_id, client_secret)
-        print_success(f"Authenticated as [bold]{me.sub}[/bold] (client credentials).")
+        access, refresh = config.extract_session_tokens(client)
+        config.store_session(
+            access_token=access,
+            refresh_token=refresh,
+            email=getattr(me, "email", None) or getattr(me, "sub", None),
+            org_id=getattr(me, "org_id", None) or getattr(me, "org", None),
+        )
+        print_success(
+            f"Authenticated as [bold]{getattr(me, 'sub', client_id)}[/bold] (client credentials)."
+        )
         return
 
-    # ------------------------------------------------------------------ #
-    # Email + password (interactive)                                       #
-    # ------------------------------------------------------------------ #
+    # Email + password (interactive)
     if not email:
         email = typer.prompt("Email")
-    if not secret:
-        secret = typer.prompt("Password", hide_input=True)
+    if not password:
+        password = typer.prompt("Password", hide_input=True)
 
-    async def _fetch_email():
+    client = AsyncTeardropClient(url, email=email, secret=password)
+
+    async def _fetch():
         try:
             return await client.get_me()
         finally:
             await client.close()
 
     with spinner("Authenticating…"):
-        client = AsyncTeardropClient(url, email=email, secret=secret)
         try:
-            me = asyncio.run(_fetch_email())
+            me = asyncio.run(_fetch())
         except Exception as exc:
             _handle_auth_error(exc)
             return
 
-    config.store_email_credentials(email, secret)
-    print_success(f"Authenticated as [bold]{me.sub}[/bold].")
+    config.store_email_credentials(email, password)
+    access, refresh = config.extract_session_tokens(client)
+    org_id = getattr(me, "org_id", None) or getattr(me, "org", None)
+    config.store_session(
+        access_token=access,
+        refresh_token=refresh,
+        email=email,
+        org_id=org_id,
+    )
+    org_label = (
+        f" (org: {getattr(me, 'org_name', None) or org_id}, role: {getattr(me, 'role', '?')})"
+        if org_id
+        else ""
+    )
+    print_success(f"Logged in as [bold]{email}[/bold]{org_label}")
 
 
 # ---------------------------------------------------------------------------
@@ -124,8 +147,6 @@ def login(
 
 def _login_siwe(url: str) -> None:
     """SIWE login using a private key supplied via TEARDROP_SIWE_PRIVATE_KEY."""
-    import asyncio
-
     from teardrop import AsyncTeardropClient
 
     from teardrop_cli import config
@@ -159,8 +180,6 @@ def _login_siwe(url: str) -> None:
             nonce_resp = await client.get_siwe_nonce()
             nonce = nonce_resp.get("nonce", nonce_resp.get("value", ""))
 
-            # Construct EIP-4361 message
-            from datetime import datetime
             from urllib.parse import urlparse
 
             parsed = urlparse(url)
@@ -183,8 +202,7 @@ def _login_siwe(url: str) -> None:
             if not signature.startswith("0x"):
                 signature = "0x" + signature
 
-            jwt_token = await client.authenticate_siwe(message, signature, nonce)
-            return jwt_token
+            return await client.authenticate_siwe(message, signature, nonce)
         finally:
             await client.close()
 
@@ -195,7 +213,7 @@ def _login_siwe(url: str) -> None:
             _handle_auth_error(exc)
             return
 
-    config.store_token(jwt_token)
+    config.store_session(access_token=jwt_token)
     print_success(f"Authenticated via SIWE as [bold]{wallet_address}[/bold].")
 
 
@@ -205,7 +223,7 @@ def _handle_auth_error(exc: Exception) -> None:
     from teardrop_cli.formatting import print_error
 
     if isinstance(exc, AuthenticationError):
-        print_error("Invalid credentials.", hint="Check your email and password.")
+        print_error("Invalid email or password.")
     elif isinstance(exc, APIError):
         print_error(f"API error {exc.status_code}.", hint=str(exc))
     else:
@@ -214,37 +232,20 @@ def _handle_auth_error(exc: Exception) -> None:
 
 
 # ---------------------------------------------------------------------------
-# logout
+# status
 # ---------------------------------------------------------------------------
 
 
 @app.command()
-def logout() -> None:
-    """Remove stored credentials."""
-    from teardrop_cli import config
-    from teardrop_cli.formatting import print_success
-
-    config.clear_credentials()
-    print_success("Logged out. Credentials removed.")
-
-
-# ---------------------------------------------------------------------------
-# whoami
-# ---------------------------------------------------------------------------
-
-
-@app.command()
-def whoami(
-    base_url: Annotated[
-        str | None, typer.Option("--base-url", help="Override the API base URL.", hidden=True)
-    ] = None,
+def status(
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
 ) -> None:
     """Show the currently authenticated user."""
-    import asyncio
+    from teardrop import AuthenticationError
 
     from teardrop_cli import config
-    from teardrop_cli.formatting import print_json, print_table, spinner
+    from teardrop_cli.formatting import print_error, print_json, print_table, spinner
 
     client = config.get_client(base_url)
 
@@ -254,10 +255,14 @@ def whoami(
         finally:
             await client.close()
 
-    with spinner("Fetching identity…"):
-        me = asyncio.run(_fetch())
+    try:
+        with spinner("Fetching identity…"):
+            me = asyncio.run(_fetch())
+    except AuthenticationError:
+        print_error("Not authenticated.", hint="Run: `teardrop auth login`")
+        raise typer.Exit(1) from None
 
-    data = me.model_dump()
+    data = me.model_dump() if hasattr(me, "model_dump") else dict(me)
     if as_json:
         print_json(data)
         return
@@ -266,5 +271,40 @@ def whoami(
     print_table(
         [("Field", {"style": "bold cyan"}), "Value"],
         rows,
-        title="Current User",
+        title="Identity",
     )
+
+
+# ---------------------------------------------------------------------------
+# logout
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def logout(
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
+) -> None:
+    """Revoke refresh token and clear stored credentials."""
+    from teardrop_cli import config
+    from teardrop_cli.formatting import print_success, print_warning
+
+    refresh = config.get_refresh_token()
+    if refresh:
+        try:
+            from teardrop import AsyncTeardropClient
+
+            url = base_url or config.get_base_url()
+            client = AsyncTeardropClient(url)
+
+            async def _revoke():
+                try:
+                    await client.logout(refresh)
+                finally:
+                    await client.close()
+
+            asyncio.run(_revoke())
+        except Exception as exc:  # noqa: BLE001
+            print_warning(f"Server-side logout failed ({exc}); clearing local credentials anyway.")
+
+    config.clear_credentials()
+    print_success("Logged out. Credentials cleared from ~/.teardrop/config.toml")
