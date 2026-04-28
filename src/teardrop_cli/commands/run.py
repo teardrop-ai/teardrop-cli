@@ -79,7 +79,7 @@ async def _stream(client, message: str, thread: str | None, context: dict | None
     from teardrop_cli.formatting import _render_stream
 
     try:
-        events = client.run(message, thread_id=thread, context=context, stream=True)
+        events = client.run(message, thread_id=thread, context=context)
         if hasattr(events, "__await__") and not hasattr(events, "__aiter__"):
             events = await events
         await _render_stream(events)
@@ -88,24 +88,30 @@ async def _stream(client, message: str, thread: str | None, context: dict | None
 
 
 async def _collect(client, message: str, thread: str | None, context: dict | None) -> str:
+    from teardrop_cli.formatting import (
+        _EV_TEXT,
+        _extract_text_chunk,
+        _strip_surface_payload,
+    )
+
     try:
-        try:
-            from teardrop.streaming import async_collect_text
-        except ImportError:
-            async_collect_text = None  # type: ignore[assignment]
+        events = client.run(message, thread_id=thread, context=context)
+        if hasattr(events, "__await__") and not hasattr(events, "__aiter__"):
+            events = await events
 
-        if async_collect_text is not None:
-            events = client.run(message, thread_id=thread, context=context, stream=True)
-            if hasattr(events, "__await__") and not hasattr(events, "__aiter__"):
-                events = await events
-            return await async_collect_text(events)
+        if hasattr(events, "__aiter__"):
+            parts: list[str] = []
+            async for event in events:
+                if getattr(event, "type", "") == _EV_TEXT:
+                    parts.append(_extract_text_chunk(getattr(event, "data", None)))
+            return _strip_surface_payload("".join(parts))
 
-        result = await client.run(message, thread_id=thread, context=context, stream=False)
-        if hasattr(result, "text"):
-            return result.text
-        if isinstance(result, dict):
-            return result.get("text", "")
-        return str(result)
+        # Non-streaming fallback (older SDKs that returned a result object).
+        if hasattr(events, "text"):
+            return events.text
+        if isinstance(events, dict):
+            return events.get("text", "")
+        return str(events)
     finally:
         await client.close()
 

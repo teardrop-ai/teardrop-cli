@@ -30,20 +30,27 @@ def _cost_dollars(atomic: int | None) -> str:
 
 
 async def _fetch_catalog(client) -> list[dict]:
-    """Page through the catalog and return a flat list of tool dicts."""
-    items: list[dict] = []
-    cursor: str | None = None
-    while True:
-        result = await client.get_marketplace_catalog(sort="name", limit=100, cursor=cursor)
-        if hasattr(result, "model_dump"):
-            result = result.model_dump()
-        tools = result.get("tools", result.get("items", []))
-        for t in tools:
-            items.append(t.model_dump() if hasattr(t, "model_dump") else dict(t))
-        cursor = result.get("next_cursor")
-        if not cursor:
-            break
-    return items
+    """Fetch the full catalog and return a flat list of tool dicts."""
+    from pydantic import ValidationError as PydanticValidationError
+
+    try:
+        result = await client.get_marketplace_catalog(limit=100)
+    except PydanticValidationError:
+        # SDK model is out of sync with the API response (e.g. a required field is
+        # absent).  Fall back to the raw HTTP layer so the CLI keeps working.
+        http = await client._get_http()
+        resp = await http.get(
+            f"{client._base_url}/marketplace/catalog", params={"limit": 100}
+        )
+        client._raise_for_status(resp)
+        data = resp.json()
+        tools = data.get("tools", data.get("items", []))
+        return [dict(t) for t in tools]
+
+    if hasattr(result, "model_dump"):
+        result = result.model_dump()
+    tools = result.get("tools", result.get("items", []))
+    return [t.model_dump() if hasattr(t, "model_dump") else dict(t) for t in tools]
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +285,27 @@ def subscribe(
     print_success(f"Subscribed to {qualified_name} (id: {data.get('id', '?')})")
 
 
+async def _fetch_subscriptions(client) -> list[dict]:
+    """Fetch active subscriptions, working around SDK response-shape mismatches."""
+    from pydantic import ValidationError as PydanticValidationError
+
+    try:
+        subs = await client.get_subscriptions()
+        return [s.model_dump() if hasattr(s, "model_dump") else dict(s) for s in subs]
+    except (PydanticValidationError, TypeError, AttributeError):
+        # API returns {"subscriptions": [...]} but SDK iterates the dict keys.
+        http = await client._get_http()
+        resp = await http.get(
+            f"{client._base_url}/marketplace/subscriptions",
+            headers=await client._headers(),
+        )
+        client._raise_for_status(resp)
+        data = resp.json()
+        if isinstance(data, list):
+            return data
+        return data.get("subscriptions", data.get("items", []))
+
+
 async def _lookup_then_close(client, qualified_name: str) -> list[dict]:
     try:
         return await _fetch_catalog(client)
@@ -305,18 +333,14 @@ def unsubscribe(
 
     async def _do():
         try:
-            subs = await client.get_subscriptions()
-            target = None
-            for s in subs:
-                name = getattr(s, "qualified_tool_name", None) or (
-                    s.get("qualified_tool_name") if isinstance(s, dict) else None
-                )
-                if name == qualified_name:
-                    target = s
-                    break
+            subs = await _fetch_subscriptions(client)
+            target = next(
+                (s for s in subs if s.get("qualified_tool_name") == qualified_name),
+                None,
+            )
             if target is None:
                 return None
-            sub_id = getattr(target, "id", None) or target.get("id")
+            sub_id = target.get("id")
             await client.unsubscribe(sub_id)
             return sub_id
         finally:
@@ -350,14 +374,12 @@ def subscriptions(
 
     async def _fetch():
         try:
-            return await client.get_subscriptions()
+            return await _fetch_subscriptions(client)
         finally:
             await client.close()
 
     with spinner("Fetching subscriptions…"):
-        subs = asyncio.run(_fetch())
-
-    items = [s.model_dump() if hasattr(s, "model_dump") else dict(s) for s in subs]
+        items = asyncio.run(_fetch())
 
     if as_json:
         print_json(items)

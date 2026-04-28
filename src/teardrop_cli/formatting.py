@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
@@ -152,6 +153,63 @@ except ImportError:  # pragma: no cover
     _EV_DONE = "DONE"
 
 
+def _extract_text_chunk(data: Any) -> str:
+    """Extract a text string from a TEXT_MESSAGE_CONTENT event payload.
+
+    The backend's ``delta`` field may be a plain string OR a list of
+    Anthropic-style content blocks like ``[{"text": "...", "type": "text"}]``.
+    Older payloads used a ``content`` key. Handle all shapes.
+    """
+    if isinstance(data, str):
+        return data
+    if not isinstance(data, dict):
+        return ""
+
+    value: Any = data.get("delta")
+    if value is None:
+        value = data.get("content", "")
+
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: list[str] = []
+        for block in value:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                text = block.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+    return ""
+
+
+# Matches a complete fenced code block. The agent occasionally emits a UI
+# "surface" payload (e.g. ```json {...}``` ) inside narrative text. The CLI is a
+# text-only client; structured UI belongs in a separate SURFACE_UPDATE event.
+# Until the backend separates them, hide fenced ``json``/``surface`` blocks here.
+_FENCED_SURFACE_RE = re.compile(
+    r"\n*```(?:json|surface)\b[^\n]*\n.*?\n```\s*",
+    re.DOTALL | re.IGNORECASE,
+)
+# Matches an *unclosed* trailing fence so it disappears mid-stream rather than
+# flickering as the JSON arrives token-by-token.
+_UNCLOSED_FENCE_RE = re.compile(
+    r"\n*```(?:json|surface)\b.*\Z",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _strip_surface_payload(text: str) -> str:
+    """Remove fenced JSON/surface blocks from agent narrative text.
+
+    Handles both completed blocks and unclosed trailing fences (during stream).
+    """
+    text = _FENCED_SURFACE_RE.sub("", text)
+    text = _UNCLOSED_FENCE_RE.sub("", text)
+    return text
+
+
 def stream_agent_response(events: AsyncIterator) -> None:  # type: ignore[type-arg]
     """Render a streaming agent run to the terminal.
 
@@ -183,13 +241,9 @@ async def _render_stream(events: AsyncIterator) -> None:  # type: ignore[type-ar
             data = getattr(event, "data", None)
 
             if ev_type == _EV_TEXT:
-                chunk = ""
-                if isinstance(data, dict):
-                    chunk = data.get("content", "")
-                elif isinstance(data, str):
-                    chunk = data
+                chunk = _extract_text_chunk(data)
                 accumulated_text += chunk
-                live.update(Markdown(accumulated_text))
+                live.update(Markdown(_strip_surface_payload(accumulated_text)))
 
             elif ev_type == _EV_TOOL_START:
                 tool_depth += 1
@@ -197,13 +251,15 @@ async def _render_stream(events: AsyncIterator) -> None:  # type: ignore[type-ar
                 if isinstance(data, dict):
                     tool_name = data.get("tool_name", data.get("name", ""))
                 indicator = f"\n\n*[Tool: {tool_name}…]*\n"
-                live.update(Markdown(accumulated_text + indicator))
+                live.update(
+                    Markdown(_strip_surface_payload(accumulated_text) + indicator)
+                )
 
             elif ev_type == _EV_TOOL_END:
                 tool_depth = max(0, tool_depth - 1)
                 if tool_depth == 0:
                     # Clear inline indicator; response text continues
-                    live.update(Markdown(accumulated_text))
+                    live.update(Markdown(_strip_surface_payload(accumulated_text)))
 
             elif ev_type == _EV_USAGE:
                 # Print usage summary below the response

@@ -28,10 +28,13 @@ class TestModelsBenchmarks:
     def test_public_benchmarks_no_cache_flag(
         self, runner: CliRunner, patch_get_client, mock_client
     ):
-        runner.invoke(app, ["models", "benchmarks", "--no-cache"])
+        # --no-cache is a CLI flag that previously passed no_cache= to the SDK method,
+        # but get_model_benchmarks() accepts no arguments; flag is still accepted by CLI
+        result = runner.invoke(app, ["models", "benchmarks", "--no-cache"])
+        assert result.exit_code == 0, result.output
         mock_client.get_model_benchmarks.assert_called_once()
         _, kwargs = mock_client.get_model_benchmarks.call_args
-        assert kwargs.get("no_cache") is True
+        assert "no_cache" not in kwargs
 
     def test_public_benchmarks_empty_list(self, runner: CliRunner, patch_get_client, mock_client):
         from teardrop_cli._fixtures import make_benchmarks_response

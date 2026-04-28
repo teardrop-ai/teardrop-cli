@@ -28,13 +28,13 @@ def test_siwe_sign_and_recover() -> None:
     wallet_address = account.address
 
     # Reproduce the message format from _login_siwe()
-    domain = "api.teardrop.ai"
+    domain = "api.teardrop.dev"
     nonce = "testNonce0xABC123"
     message = (
         f"{domain} wants you to sign in with your Ethereum account:\n"
         f"{wallet_address}\n\n"
         f"Sign in to Teardrop\n\n"
-        f"URI: https://api.teardrop.ai\n"
+        f"URI: https://api.teardrop.dev\n"
         f"Version: 1\n"
         f"Chain ID: 1\n"
         f"Nonce: {nonce}\n"

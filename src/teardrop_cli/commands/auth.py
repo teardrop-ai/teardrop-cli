@@ -202,7 +202,7 @@ def _login_siwe(url: str) -> None:
             if not signature.startswith("0x"):
                 signature = "0x" + signature
 
-            return await client.authenticate_siwe(message, signature, nonce)
+            return await client.authenticate_siwe(message, signature)
         finally:
             await client.close()
 

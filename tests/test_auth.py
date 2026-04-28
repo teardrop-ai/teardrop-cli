@@ -102,6 +102,10 @@ class TestSiweLogin:
 
         assert result.exit_code == 0, result.output
         assert stored["access_token"] == "jwt.siwe.ok"
+        # authenticate_siwe must be called with exactly (message, signature) — no nonce arg
+        args, kwargs = mock_client.authenticate_siwe.call_args
+        assert len(args) == 2, f"Expected 2 positional args, got {len(args)}"
+        assert not kwargs, f"Expected no kwargs, got {kwargs}"
 
     def test_siwe_missing_env(self, runner: CliRunner, monkeypatch):
         monkeypatch.delenv("TEARDROP_SIWE_PRIVATE_KEY", raising=False)

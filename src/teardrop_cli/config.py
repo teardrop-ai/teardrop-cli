@@ -28,7 +28,7 @@ _KEYRING_SECRET_KEY = "secret"
 _KEYRING_CLIENT_ID_KEY = "client_id"
 _KEYRING_CLIENT_SECRET_KEY = "client_secret"
 
-DEFAULT_BASE_URL = "https://api.teardrop.ai"
+DEFAULT_BASE_URL = "https://api.teardrop.dev"
 
 # ---------------------------------------------------------------------------
 # Directory helpers

@@ -59,9 +59,9 @@ def benchmarks(
         async def _fetch():
             try:
                 if org:
-                    return await client.get_org_model_benchmarks(org_id=org)
+                    return await client.get_org_model_benchmarks()
                 else:
-                    return await client.get_model_benchmarks(no_cache=no_cache)
+                    return await client.get_model_benchmarks()
             finally:
                 await client.close()
 

@@ -48,7 +48,8 @@ class TestSet:
     def test_set_clear_key(self, runner: CliRunner, patch_get_client, mock_client):
         result = runner.invoke(app, ["llm-config", "set", "--clear-key"])
         assert result.exit_code == 0, result.output
-        mock_client.clear_llm_api_key.assert_awaited()
+        # clear_llm_api_key does not exist on the SDK; --clear-key calls set_llm_config without api_key
+        mock_client.set_llm_config.assert_awaited()
 
 
 class TestDelete:

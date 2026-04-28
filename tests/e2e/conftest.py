@@ -5,7 +5,7 @@ Required env vars:
     TEARDROP_API_KEY (for static JWT) OR TEARDROP_EMAIL + TEARDROP_SECRET
 
 Optional:
-    TEARDROP_E2E_BASE_URL            default: https://api.teardrop.ai
+    TEARDROP_E2E_BASE_URL            default: https://api.teardrop.dev
     TEARDROP_E2E_TEST_TOOL           required for marketplace lifecycle test
     TEARDROP_E2E_WALLET_PRIVATE_KEY  required for live SIWE login test
 
@@ -50,7 +50,7 @@ def live_creds() -> dict[str, str | None]:
     token = os.environ.get("TEARDROP_API_KEY")
     email = os.environ.get("TEARDROP_EMAIL")
     secret = os.environ.get("TEARDROP_SECRET")
-    base_url = os.environ.get("TEARDROP_E2E_BASE_URL", "https://api.teardrop.ai")
+    base_url = os.environ.get("TEARDROP_E2E_BASE_URL", "https://api.teardrop.dev")
 
     if not token and not (email and secret):
         pytest.skip(

@@ -233,6 +233,12 @@ teardrop tools publish \
   --settlement-wallet 0xYourChecksumAddress
 ```
 
+Or on Windows PowerShell (single line):
+
+```powershell
+teardrop tools publish --from-file tool.json --settlement-wallet 0xYourChecksumAddress
+```
+
 You only need to do this once. To update it later, re-run publish with the new address.
 
 #### Manage existing tools
@@ -304,26 +310,28 @@ teardrop llm-config delete --yes      # skip confirmation
 
 ### Set model and routing
 
-```bash
-# Select provider and model
-teardrop llm-config set --provider anthropic --model claude-haiku-4-5-20251001
+Teardrop offers three production models, each optimized for a routing tier:
 
-# Route calls by cost, speed, or quality
+```bash
+# Cost tier (DeepSeek V4 Flash via OpenRouter)
+teardrop llm-config set --provider openrouter --model deepseek-chat --routing cost
+
+# Speed tier (Gemini 3 Flash)
+teardrop llm-config set --provider google --model gemini-3-flash --routing speed
+
+# Quality tier (Claude Sonnet 4.6 — default)
+teardrop llm-config set --provider anthropic --model claude-sonnet-4-6 --routing quality
+
+# Advanced tuning (optional)
 teardrop llm-config set \
   --provider anthropic \
-  --model claude-haiku-4-5-20251001 \
-  --routing cost
-
-# Advanced tuning
-teardrop llm-config set \
-  --provider openai \
-  --model gpt-4o \
+  --model claude-sonnet-4-6 \
   --max-tokens 8000 \
   --temperature 0.7 \
   --timeout-seconds 60
 ```
 
-**Supported providers:** `anthropic`, `openai`, `google`, `openrouter`
+**Supported providers:** `openrouter`, `google`, `anthropic`
 
 **Routing preferences:** `default` · `cost` · `speed` · `quality`
 
@@ -336,40 +344,30 @@ Use your own provider API key — Teardrop's shared key is bypassed entirely.
 ```bash
 # Inline (key visible in shell history — acceptable for non-sensitive dev use)
 teardrop llm-config set \
-  --provider openai \
-  --model gpt-4o \
-  --byok-key $OPENAI_API_KEY
+  --provider anthropic \
+  --model claude-sonnet-4-6 \
+  --byok-key $ANTHROPIC_API_KEY
 
 # Secure stdin pipe (key never appears in history or process list)
 # macOS / Linux
 cat "$key_file" | teardrop llm-config set \
-  --provider openai \
-  --model gpt-4o \
+  --provider anthropic \
+  --model claude-sonnet-4-6 \
   --byok-key -
 
 # Windows (PowerShell)
 Get-Content "$key_file" | teardrop llm-config set `
-  --provider openai `
-  --model gpt-4o `
+  --provider anthropic `
+  --model claude-sonnet-4-6 `
   --byok-key -
 
 # Remove BYOK key and revert to platform shared key
-teardrop llm-config set --provider openai --model gpt-4o --clear-key
+teardrop llm-config set --provider anthropic --model claude-sonnet-4-6 --clear-key
 ```
 
-### Self-hosted model
+### Teardrop platform models
 
-Point the CLI at any OpenAI-compatible endpoint:
-
-```bash
-teardrop llm-config set \
-  --provider openai \
-  --model llama3-70b \
-  --api-base https://gpu-cluster.internal.example.com:8000/v1 \
-  --byok-key $LOCAL_TOKEN
-```
-
-The `--api-base` URL must be HTTPS. A warning is shown if it is not.
+All available models are hosted on the Teardrop platform. To use a different provider's API key with BYOK, set it alongside one of the three supported models.
 
 ---
 
@@ -410,7 +408,7 @@ teardrop models benchmarks --org <org-id>
 teardrop models benchmarks --org <org-id> --force-refresh
 ```
 
-The public table shows quality tier, P95 latency, per-token pricing, and 7-day run volume. The org-scoped table shows your average latency, cost per run, and tokens per second.
+The public table shows model details, P95 latency, per-token pricing, and 7-day run volume across all three tiers (cost, speed, quality). The org-scoped table shows your average latency, cost per run, and tokens per second for your selected routing preference.
 
 ---
 
@@ -427,11 +425,11 @@ teardrop config list --json
 
 # Read or write a single key
 teardrop config get api_url
-teardrop config set api_url https://api.teardrop.ai
+teardrop config set api_url https://api.teardrop.dev
 
 # Create the config file explicitly (useful for bootstrap scripts)
 teardrop init
-teardrop init --base-url https://api.teardrop.ai
+teardrop init --base-url https://api.teardrop.dev
 ```
 
 Writable keys: `api_url`, `email`, `org_id`. Tokens and secrets are managed only via `auth login` and `auth logout`.

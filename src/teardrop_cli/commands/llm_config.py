@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sys
 from typing import Annotated
 
@@ -47,10 +48,8 @@ def get(
     client = config.get_client(base_url)
     if no_cache:
         # Bypass SDK in-process cache
-        try:
+        with contextlib.suppress(Exception):
             client._llm_config_cache = None  # type: ignore[attr-defined]
-        except Exception:
-            pass
 
     async def _fetch():
         try:
@@ -221,7 +220,7 @@ def set_config(
     async def _apply():
         try:
             if clear_key:
-                return await client.clear_llm_api_key(**merged)
+                return await client.set_llm_config(**merged)
             kwargs = dict(merged)
             if resolved_key is not None:
                 kwargs["api_key"] = resolved_key

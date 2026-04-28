@@ -91,7 +91,7 @@ def history(
 
     async def _fetch():
         try:
-            return await client.get_earnings(limit=limit, tool_name=tool)
+            return await client.get_earnings(limit=limit)
         finally:
             await client.close()
 
@@ -102,6 +102,8 @@ def history(
         data = data.model_dump()
     items_raw = data.get("earnings") or data.get("items") or []
     items = [e.model_dump() if hasattr(e, "model_dump") else dict(e) for e in items_raw]
+    if tool:
+        items = [e for e in items if e.get("tool_name") == tool]
 
     if as_json:
         print_json({"earnings": items, "next_cursor": data.get("next_cursor")})

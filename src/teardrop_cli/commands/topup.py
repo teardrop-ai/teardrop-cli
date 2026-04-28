@@ -33,7 +33,7 @@ def stripe(
             "--return-url",
             help="URL to redirect to after Stripe checkout.",
         ),
-    ] = "https://teardrop.ai/billing/topup/complete",
+    ] = "https://teardrop.dev/billing/topup/complete",
     no_browser: Annotated[
         bool,
         typer.Option("--no-browser", help="Do not auto-open browser; print URL instead."),

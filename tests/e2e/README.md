@@ -35,7 +35,7 @@ pytest -m e2e
 | `TEARDROP_API_KEY` | one of these | — | Pre-issued JWT (standard env var; priority 1) |
 | `TEARDROP_EMAIL` | one of these | — | Email for email+secret login |
 | `TEARDROP_SECRET` | one of these | — | Password / secret |
-| `TEARDROP_E2E_BASE_URL` | | `https://api.teardrop.ai` | Override API base URL |
+| `TEARDROP_E2E_BASE_URL` | | `https://api.teardrop.dev` | Override API base URL |
 | `TEARDROP_E2E_TEST_TOOL` | | — | `org/tool` name for marketplace lifecycle test |
 | `TEARDROP_E2E_WALLET_PRIVATE_KEY` | | — | Ethereum private key for live SIWE test |
 | `TEARDROP_E2E_STRIPE` | | — | Set to `1` to run the Stripe session creation test (opt-in; see *Side Effects* below) |

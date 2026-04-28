@@ -25,19 +25,19 @@ def make_sse_events(text: str) -> list[MagicMock]:
 
     # text chunk
     chunk = MagicMock()
-    chunk.type = "text_msg_content"
-    chunk.data = {"content": text}
+    chunk.type = "TEXT_MESSAGE_CONTENT"
+    chunk.data = {"delta": [{"text": text, "type": "text", "index": 0}]}
     events.append(chunk)
 
     # usage summary
     usage = MagicMock()
-    usage.type = "usage_summary"
+    usage.type = "USAGE_SUMMARY"
     usage.data = {"input_tokens": 5, "output_tokens": 10, "total_cost_usd": 0.0001}
     events.append(usage)
 
     # done
     done = MagicMock()
-    done.type = "done"
+    done.type = "DONE"
     done.data = None
     events.append(done)
 
