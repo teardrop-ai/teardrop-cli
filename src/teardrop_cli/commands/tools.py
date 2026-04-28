@@ -150,6 +150,59 @@ def info(
 
 
 # ---------------------------------------------------------------------------
+# init — scaffold tool.json
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def init(
+    name: Annotated[
+        str | None,
+        typer.Argument(help="Tool name (lowercase, a-z0-9_). Prompted if omitted."),
+    ] = None,
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", "-o", help="Output path (default: ./tool.json)."),
+    ] = None,
+    with_marketplace: Annotated[
+        bool,
+        typer.Option(
+            "--with-marketplace",
+            help="Include marketplace fields (publish_as_mcp, base_price_usdc, etc.).",
+        ),
+    ] = False,
+    force: Annotated[
+        bool, typer.Option("--force", "-f", help="Overwrite existing file.")
+    ] = False,
+) -> None:
+    """Scaffold a starter ``tool.json`` ready for ``teardrop tools publish``."""
+    from teardrop_cli._templates import render_tool_template
+    from teardrop_cli.formatting import print_error, print_success
+
+    if not name:
+        name = typer.prompt("Tool name (lowercase, a-z0-9_)")
+    if not _NAME_RE.match(name) or len(name) > 64:
+        print_error(
+            f"Invalid tool name {name!r}.",
+            hint="Must match ^[a-z][a-z0-9_]*$ and be ≤ 64 chars.",
+        )
+        raise typer.Exit(1)
+
+    target = out or Path("tool.json")
+    if target.exists() and not force:
+        print_error(f"{target} already exists.", hint="Pass --force to overwrite.")
+        raise typer.Exit(1)
+
+    data = render_tool_template(name, with_marketplace=with_marketplace)
+    target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    print_success(f"Wrote {target}")
+    print_success(
+        f"Edit it, then publish with: [bold]teardrop tools publish --from-file {target}[/bold]"
+    )
+
+
+# ---------------------------------------------------------------------------
 # publish
 # ---------------------------------------------------------------------------
 

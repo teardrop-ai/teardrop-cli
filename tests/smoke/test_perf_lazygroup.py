@@ -61,3 +61,31 @@ def test_help_wall_time() -> None:
     assert result.returncode == 0, result.stderr
     assert "teardrop" in result.stdout.lower()
     assert elapsed_ms < 2000, f"--help took {elapsed_ms:.0f} ms (threshold: 2 000 ms)"
+
+
+@pytest.mark.smoke
+def test_quickstart_help_lazy() -> None:
+    """``teardrop quickstart --help`` must not eagerly import other subcommands.
+
+    quickstart's branches reference auth, tools, and llm_config, but those
+    imports MUST be deferred to function bodies so listing help stays fast
+    and free of side effects.
+    """
+    code = (
+        "import sys;"
+        "from teardrop_cli.cli import app;"
+        "from click.testing import CliRunner;"
+        "r = CliRunner().invoke(app, ['quickstart', '--help']);"
+        "assert r.exit_code == 0, r.output;"
+        # auth / tools / llm_config must remain unloaded
+        "loaded = [m for m in ('teardrop_cli.commands.auth',"
+        " 'teardrop_cli.commands.tools',"
+        " 'teardrop_cli.commands.llm_config') if m in sys.modules];"
+        "assert not loaded, f'Unexpected imports: {loaded}'"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout

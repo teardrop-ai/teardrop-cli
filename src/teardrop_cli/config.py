@@ -292,7 +292,7 @@ def get_client(base_url: str | None = None, *, require_auth: bool = True):
 
     print_error(
         "Not authenticated.",
-        hint="Run [bold]teardrop auth login[/bold] to sign in.",
+        hint="Run [bold]teardrop auth login[/bold] to sign in, or [bold]teardrop auth signup[/bold] to create an account.",
     )
     raise SystemExit(1)
 

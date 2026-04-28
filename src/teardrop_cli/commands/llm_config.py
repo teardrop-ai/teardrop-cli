@@ -311,6 +311,134 @@ def delete(
 
 
 # ---------------------------------------------------------------------------
+# byok — interactive bring-your-own-key wizard
+# ---------------------------------------------------------------------------
+
+
+# Curated provider → default model mapping for the interactive wizard.
+_DEFAULT_MODELS = {
+    "anthropic": "claude-sonnet-4-6",
+    "google": "gemini-3-flash",
+    "openrouter": "deepseek-chat",
+    "openai": "gpt-4.1",
+}
+
+
+@app.command()
+def byok(
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
+) -> None:
+    """One-shot BYOK setup: pick provider, paste key, choose routing tier."""
+    _byok_interactive(base_url=base_url)
+
+
+def _byok_interactive(*, base_url: str | None) -> None:
+    """Implementation shared between ``llm-config byok`` and ``quickstart``."""
+    from teardrop_cli.formatting import console, print_error
+
+    console.print("[bold]Bring-your-own-key LLM setup[/bold]")
+    console.print("[dim]Your API key is sent only to Teardrop over TLS and never logged.[/dim]\n")
+
+    # Provider
+    providers = ["anthropic", "google", "openrouter"]
+    for i, p in enumerate(providers, 1):
+        console.print(f"  [cyan]{i}[/cyan]  {p}")
+    raw = typer.prompt("Provider", default="1")
+    try:
+        provider = providers[int(raw) - 1] if raw.isdigit() else raw.strip().lower()
+    except (ValueError, IndexError):
+        print_error(f"Unknown provider: {raw!r}")
+        raise typer.Exit(1) from None
+    if provider not in _SUPPORTED_PROVIDERS:
+        print_error(f"Unsupported provider: {provider!r}", hint=f"Supported: {', '.join(providers)}")
+        raise typer.Exit(1)
+
+    # Model
+    default_model = _DEFAULT_MODELS.get(provider, "")
+    model = typer.prompt("Model", default=default_model)
+
+    # Routing
+    routings = ["default", "cost", "speed", "quality"]
+    routing = typer.prompt(
+        f"Routing tier ({'/'.join(routings)})", default="quality"
+    )
+    if routing not in routings:
+        print_error(f"Invalid routing: {routing!r}", hint=f"Choose: {', '.join(routings)}")
+        raise typer.Exit(1)
+
+    # Key (hidden input). Allow stdin pipe via "-" sentinel for CI use.
+    api_key = typer.prompt("API key", hide_input=True)
+    if api_key.strip() == "-":
+        import sys as _sys
+
+        api_key = _sys.stdin.read().strip()
+    if not api_key:
+        print_error("API key cannot be empty.")
+        raise typer.Exit(1)
+
+    try:
+        _apply_byok(
+            base_url=base_url,
+            provider=provider,
+            model=model,
+            routing=routing,
+            api_key=api_key,
+        )
+    finally:
+        api_key = "0" * len(api_key)  # noqa: F841
+        del api_key
+
+
+def _apply_byok(
+    *,
+    base_url: str | None,
+    provider: str,
+    model: str,
+    routing: str,
+    api_key: str,
+) -> None:
+    """Submit the BYOK config. Mirrors ``set_config`` but key-required."""
+    from teardrop import AuthenticationError
+
+    from teardrop_cli import config
+    from teardrop_cli.formatting import print_error, print_success, print_table, spinner
+
+    client = config.get_client(base_url)
+
+    async def _do():
+        try:
+            return await client.set_llm_config(
+                provider=provider,
+                model=model,
+                routing_preference=routing,
+                api_key=api_key,
+            )
+        finally:
+            await client.close()
+
+    try:
+        with spinner("Updating LLM config…"):
+            cfg = asyncio.run(_do())
+    except AuthenticationError:
+        print_error("Not authenticated.", hint="Run: `teardrop auth login`")
+        raise typer.Exit(1) from None
+    except Exception as exc:
+        _handle_common_error(exc)
+
+    data = cfg if isinstance(cfg, dict) else cfg.model_dump()
+    print_success("BYOK configured.")
+    print_table(
+        [("Field", {"style": "bold cyan"}), "Value"],
+        [
+            ["Provider", data.get("provider", provider)],
+            ["Model", data.get("model", model)],
+            ["Routing", data.get("routing_preference", routing)],
+            ["API Key Set", f"true ({_mask_api_key(api_key)})"],
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 

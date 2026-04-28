@@ -107,11 +107,16 @@ class TestSiweLogin:
         assert len(args) == 2, f"Expected 2 positional args, got {len(args)}"
         assert not kwargs, f"Expected no kwargs, got {kwargs}"
 
-    def test_siwe_missing_env(self, runner: CliRunner, monkeypatch):
+    def test_siwe_missing_env_prompts(self, runner: CliRunner, monkeypatch):
+        """With no env key and no flags, --siwe falls back to a hidden prompt.
+
+        Sending an empty stdin aborts the prompt, so we expect a non-zero exit
+        and the prompt label in the output.
+        """
         monkeypatch.delenv("TEARDROP_SIWE_PRIVATE_KEY", raising=False)
-        result = runner.invoke(app, ["auth", "login", "--siwe"])
-        assert result.exit_code == 1
-        assert "TEARDROP_SIWE_PRIVATE_KEY" in result.output
+        result = runner.invoke(app, ["auth", "login", "--siwe"], input="")
+        assert result.exit_code != 0
+        assert "private key" in result.output.lower()
 
 
 # ---------------------------------------------------------------------------
