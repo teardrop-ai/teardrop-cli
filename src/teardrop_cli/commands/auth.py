@@ -359,7 +359,16 @@ def _resolve_siwe_private_key(
     if env_key := os.environ.get("TEARDROP_SIWE_PRIVATE_KEY"):
         return env_key, False
 
-    return typer.prompt("Ethereum private key", hide_input=True), False
+    print_error(
+        "No Ethereum private key found.",
+        hint=(
+            "Provide one via:\n"
+            "  • TEARDROP_SIWE_PRIVATE_KEY env var\n"
+            "  • --key-file PATH\n"
+            "  • --generate-wallet (creates a new wallet)"
+        ),
+    )
+    raise typer.Exit(1)
 
 
 def _login_siwe(

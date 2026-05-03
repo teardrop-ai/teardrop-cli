@@ -31,6 +31,13 @@ import click
     help="Output as JSON (implies --no-stream).",
 )
 @click.option("--base-url", "base_url", default=None, hidden=True)
+@click.option(
+    "--with-ui",
+    "with_ui",
+    is_flag=True,
+    default=False,
+    help="Include UI component generation (emit_ui=True). Adds ~60s but provides structured ui_components in output.",
+)
 def app(
     message: str,
     thread: str | None,
@@ -38,6 +45,7 @@ def app(
     no_stream: bool,
     as_json: bool,
     base_url: str | None,
+    with_ui: bool,
 ) -> None:
     from teardrop_cli import config
     from teardrop_cli.formatting import console, print_error, print_json
@@ -57,7 +65,7 @@ def app(
 
     if as_json or no_stream:
         try:
-            text = asyncio.run(_collect(client, message, thread, context))
+            text = asyncio.run(_collect(client, message, thread, context, emit_ui=with_ui))
         except Exception as exc:  # noqa: BLE001
             _handle_run_error(exc)
             raise click.exceptions.Exit(1) from None
@@ -69,42 +77,54 @@ def app(
         return
 
     try:
-        asyncio.run(_stream(client, message, thread, context))
+        asyncio.run(_stream(client, message, thread, context, emit_ui=with_ui))
     except Exception as exc:  # noqa: BLE001
         _handle_run_error(exc)
         raise click.exceptions.Exit(1) from None
 
 
-async def _stream(client, message: str, thread: str | None, context: dict | None) -> None:
+async def _stream(client, message: str, thread: str | None, context: dict | None, *, emit_ui: bool = False) -> None:
+    from contextlib import aclosing
     from teardrop_cli.formatting import _render_stream
 
     try:
-        events = client.run(message, thread_id=thread, context=context)
+        events = client.run(message, thread_id=thread, context=context, emit_ui=emit_ui)
         if hasattr(events, "__await__") and not hasattr(events, "__aiter__"):
             events = await events
-        await _render_stream(events)
+        
+        async with aclosing(events):
+            await _render_stream(events)
     finally:
         await client.close()
 
 
-async def _collect(client, message: str, thread: str | None, context: dict | None) -> str:
+async def _collect(client, message: str, thread: str | None, context: dict | None, *, emit_ui: bool = False) -> str:
     from teardrop_cli.formatting import (
         _EV_TEXT,
-        _extract_text_chunk,
-        _strip_surface_payload,
+        _extract_text_and_id,
     )
 
     try:
-        events = client.run(message, thread_id=thread, context=context)
+        events = client.run(message, thread_id=thread, context=context, emit_ui=emit_ui)
         if hasattr(events, "__await__") and not hasattr(events, "__aiter__"):
             events = await events
 
         if hasattr(events, "__aiter__"):
             parts: list[str] = []
+            current_message_id: str | None = None
             async for event in events:
                 if getattr(event, "type", "") == _EV_TEXT:
-                    parts.append(_extract_text_chunk(getattr(event, "data", None)))
-            return _strip_surface_payload("".join(parts))
+                    data = getattr(event, "data", None)
+                    chunk, message_id = _extract_text_and_id(data)
+
+                    # For --no-stream, only keep the last message's text
+                    if message_id and message_id != current_message_id:
+                        parts = []
+                        current_message_id = message_id
+
+                    parts.append(chunk)
+
+            return "".join(parts)
 
         # Non-streaming fallback (older SDKs that returned a result object).
         if hasattr(events, "text"):
@@ -138,6 +158,10 @@ def _handle_run_error(exc: BaseException) -> None:
             "Not authenticated.",
             hint="Run `teardrop auth login` to sign in.",
         )
+        return
+
+    if "DUPLICATE_CALL_BLOCKED" in msg:
+        # Suppress in normal mode; treat as informative if exposing later.
         return
 
     print_error(f"{name}: {msg}")

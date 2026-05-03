@@ -19,6 +19,58 @@ def make_jwt_payload(
     return payload
 
 
+def build_text_event(text: str, message_id: str | None = None) -> MagicMock:
+    """Build a TEXT_MESSAGE_CONTENT event for testing."""
+    chunk = MagicMock()
+    chunk.type = "TEXT_MESSAGE_CONTENT"
+    data = {"delta": text}
+    if message_id:
+        data["message_id"] = message_id
+    chunk.data = data
+    return chunk
+
+
+def build_tool_event(
+    event_type: str,
+    tool_name: str | None = None,
+    call_id: str | None = None,
+) -> MagicMock:
+    """Build a tool start/end event for testing."""
+    ev = MagicMock()
+    ev.type = event_type
+    data = {}
+    if tool_name:
+        data["tool_name"] = tool_name
+        data["name"] = tool_name
+    if call_id:
+        data["call_id"] = call_id
+    ev.data = data
+    return ev
+
+
+def build_tool_result_event(
+    tool_name: str,
+    result: dict,
+    call_id: str | None = None,
+) -> MagicMock:
+    """Build a TOOL_CALL_RESULT event for testing."""
+    ev = MagicMock()
+    ev.type = "TOOL_CALL_RESULT"
+    data: dict = {"tool_name": tool_name, "result": result}
+    if call_id:
+        data["call_id"] = call_id
+    ev.data = data
+    return ev
+
+
+def build_done_event() -> MagicMock:
+    """Build a DONE event for testing."""
+    ev = MagicMock()
+    ev.type = "DONE"
+    ev.data = None
+    return ev
+
+
 def make_sse_events(text: str) -> list[MagicMock]:
     """Build a minimal sequence of SSE events for a successful agent run."""
     events = []
@@ -29,11 +81,24 @@ def make_sse_events(text: str) -> list[MagicMock]:
     chunk.data = {"delta": [{"text": text, "type": "text", "index": 0}]}
     events.append(chunk)
 
-    # usage summary
-    usage = MagicMock()
-    usage.type = "USAGE_SUMMARY"
-    usage.data = {"input_tokens": 5, "output_tokens": 10, "total_cost_usd": 0.0001}
-    events.append(usage)
+    return events
+
+
+def make_duplicate_call_events() -> list[MagicMock]:
+    """Build a sequence of SSE events with a duplicate tool call."""
+    events = []
+
+    # text
+    chunk = MagicMock()
+    chunk.type = "TEXT_MESSAGE_CONTENT"
+    chunk.data = {"delta": "I'll fetch that again."}
+    events.append(chunk)
+
+    # duplicate block
+    dup = MagicMock()
+    dup.type = "TOOL_CALL_DUPLICATE"
+    dup.data = {"tool_name": "web_search", "reason": "cache_hit"}
+    events.append(dup)
 
     # done
     done = MagicMock()

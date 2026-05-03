@@ -120,9 +120,12 @@ teardrop run "Process this order" --context '{"order_id":"ord_123"}'
 
 # Machine-readable output
 teardrop run "..." --json --no-stream
+
+# Include UI component data for dashboard export (adds ~60s overhead)
+teardrop run "..." --json --with-ui
 ```
 
-Streaming output renders Markdown live with inline tool calls. A token + cost summary prints at the end.
+Streaming output renders Markdown live with inline tool calls. A token + cost summary prints at the end. By default, CLI output is optimized for scripting and automation (`emit_ui=false`); use `--with-ui` only if you need structured UI component data in the JSON output.
 
 If a run fails on credit, top up:
 

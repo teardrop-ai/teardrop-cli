@@ -15,10 +15,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
-from rich.live import Live
-from rich.markdown import Markdown
 from rich.table import Table
-from rich.text import Text
 
 if TYPE_CHECKING:
     pass
@@ -135,7 +132,13 @@ try:  # pragma: no cover - import shape varies across SDK versions
         EVENT_TEXT_MSG_CONTENT as _EV_TEXT,
     )
     from teardrop.streaming import (
+        EVENT_TOOL_CALL_DUPLICATE as _EV_TOOL_DUPLICATE,
+    )
+    from teardrop.streaming import (
         EVENT_TOOL_CALL_END as _EV_TOOL_END,
+    )
+    from teardrop.streaming import (
+        EVENT_TOOL_CALL_RESULT as _EV_TOOL_RESULT,
     )
     from teardrop.streaming import (
         EVENT_TOOL_CALL_START as _EV_TOOL_START,
@@ -146,67 +149,68 @@ try:  # pragma: no cover - import shape varies across SDK versions
 except ImportError:  # pragma: no cover
     _EV_TEXT = "TEXT_MESSAGE_CONTENT"
     _EV_TOOL_START = "TOOL_CALL_START"
+    _EV_TOOL_DUPLICATE = "TOOL_CALL_DUPLICATE"
     _EV_TOOL_END = "TOOL_CALL_END"
     _EV_USAGE = "USAGE_SUMMARY"
     _EV_BILLING = "BILLING_SETTLEMENT"
     _EV_ERROR = "ERROR"
     _EV_DONE = "DONE"
+    _EV_TOOL_RESULT = "TOOL_CALL_RESULT"
+
+_EV_SURFACE = "SURFACE_UPDATE"
 
 
-def _extract_text_chunk(data: Any) -> str:
-    """Extract a text string from a TEXT_MESSAGE_CONTENT event payload.
+def _extract_text_and_id(data: Any) -> tuple[str, str | None]:
+    """Extract a text string and optional message_id from a TEXT_MESSAGE_CONTENT event payload.
 
     The backend's ``delta`` field may be a plain string OR a list of
     Anthropic-style content blocks like ``[{"text": "...", "type": "text"}]``.
     Older payloads used a ``content`` key. Handle all shapes.
+
+    The backend guarantees that TEXT_MESSAGE_CONTENT contains only prose
+    (fences pre-removed); any structured UI data is delivered separately
+    via SURFACE_UPDATE events.
     """
     if isinstance(data, str):
-        return data
+        return data, None
     if not isinstance(data, dict):
-        return ""
+        return "", None
+
+    # Extraction order: message_id, then text
+    message_id = data.get("message_id")
+    if not message_id:
+        # Fallback for nested message objects if the backend wraps it
+        msg = data.get("message")
+        if isinstance(msg, dict):
+            message_id = msg.get("id")
 
     value: Any = data.get("delta")
     if value is None:
         value = data.get("content", "")
 
+    text = ""
     if isinstance(value, str):
-        return value
-    if isinstance(value, list):
+        text = value
+    elif isinstance(value, list):
         parts: list[str] = []
         for block in value:
             if isinstance(block, str):
                 parts.append(block)
             elif isinstance(block, dict):
-                text = block.get("text")
-                if isinstance(text, str):
-                    parts.append(text)
-        return "".join(parts)
-    return ""
+                inner_text = block.get("text")
+                if isinstance(inner_text, str):
+                    parts.append(inner_text)
+        text = "".join(parts)
+
+    return text, str(message_id) if message_id else None
 
 
-# Matches a complete fenced code block. The agent occasionally emits a UI
-# "surface" payload (e.g. ```json {...}``` ) inside narrative text. The CLI is a
-# text-only client; structured UI belongs in a separate SURFACE_UPDATE event.
-# Until the backend separates them, hide fenced ``json``/``surface`` blocks here.
-_FENCED_SURFACE_RE = re.compile(
-    r"\n*```(?:json|surface)\b[^\n]*\n.*?\n```\s*",
-    re.DOTALL | re.IGNORECASE,
-)
-# Matches an *unclosed* trailing fence so it disappears mid-stream rather than
-# flickering as the JSON arrives token-by-token.
-_UNCLOSED_FENCE_RE = re.compile(
-    r"\n*```(?:json|surface)\b.*\Z",
-    re.DOTALL | re.IGNORECASE,
-)
+def _extract_text_chunk(data: Any) -> str:
+    """Extract a text string from a TEXT_MESSAGE_CONTENT event payload.
 
-
-def _strip_surface_payload(text: str) -> str:
-    """Remove fenced JSON/surface blocks from agent narrative text.
-
-    Handles both completed blocks and unclosed trailing fences (during stream).
+    Deprecated: Use _extract_text_and_id instead.
     """
-    text = _FENCED_SURFACE_RE.sub("", text)
-    text = _UNCLOSED_FENCE_RE.sub("", text)
+    text, _ = _extract_text_and_id(data)
     return text
 
 
@@ -221,67 +225,106 @@ def stream_agent_response(events: AsyncIterator) -> None:  # type: ignore[type-a
 
 
 async def _render_stream(events: AsyncIterator) -> None:  # type: ignore[type-arg]
-    """Async implementation of the streaming renderer."""
+    """Async implementation of the streaming renderer.
+    
+    Streams response text and tool calls directly to scrollback (no in-place
+    updates) to ensure:
+    1. Full scrollback visibility during streaming
+    2. No duplicate content on terminal resize
+    """
     accumulated_text = ""
-    tool_depth = 0  # track nested tool calls
+    current_message_id = None
+    tool_depth = 0
+    last_flush_len = 0  # Track printed content to avoid re-printing
+    chunk_size = 100  # Flush every ~100 chars to scrollback for responsiveness
 
-    # We use a Live display so we can update the rendered Markdown in-place.
-    # ``auto_refresh=False`` lets us control exactly when re-renders happen.
-    live = Live(
-        Text(""),
-        console=console,
-        refresh_per_second=15,
-        auto_refresh=True,
-        transient=False,
-    )
+    async for event in events:
+        ev_type: str = getattr(event, "type", "") or ""
+        data = getattr(event, "data", None)
 
-    with live:
-        async for event in events:
-            ev_type: str = getattr(event, "type", "") or ""
-            data = getattr(event, "data", None)
+        if ev_type == _EV_TEXT:
+            chunk, message_id = _extract_text_and_id(data)
 
-            if ev_type == _EV_TEXT:
-                chunk = _extract_text_chunk(data)
-                accumulated_text += chunk
-                live.update(Markdown(_strip_surface_payload(accumulated_text)))
+            # Reset on new message_id (if IDs are provided)
+            if message_id and message_id != current_message_id:
+                accumulated_text = ""
+                last_flush_len = 0
+                current_message_id = message_id
 
-            elif ev_type == _EV_TOOL_START:
-                tool_depth += 1
-                tool_name = ""
-                if isinstance(data, dict):
-                    tool_name = data.get("tool_name", data.get("name", ""))
-                indicator = f"\n\n*[Tool: {tool_name}…]*\n"
-                live.update(
-                    Markdown(_strip_surface_payload(accumulated_text) + indicator)
+            accumulated_text += chunk
+
+            # Periodically flush new content to scrollback for visibility
+            # The backend guarantees that TEXT_MESSAGE_CONTENT contains ONLY
+            # prose; any structured UI data is sent via SURFACE_UPDATE.
+            if len(accumulated_text) - last_flush_len >= chunk_size:
+                new_content = accumulated_text[last_flush_len:]
+                console.print(new_content, end="", soft_wrap=True)
+                last_flush_len = len(accumulated_text)
+
+        elif ev_type == _EV_SURFACE:
+            # SURFACE_UPDATE events contain parsed UI components.
+            # CLI currently focuses on narrative prose; UI rendering
+            # is reserved for future implementation.
+            pass
+
+        elif ev_type == _EV_TOOL_START:
+            tool_depth += 1
+            tool_name = ""
+            if isinstance(data, dict):
+                tool_name = data.get("tool_name", data.get("name", ""))
+            console.print(f"\n*[Tool: {tool_name}…]*")
+
+        elif ev_type == _EV_TOOL_RESULT:
+            if isinstance(data, dict):
+                tool_name = data.get("tool_name", data.get("name", ""))
+                result = data.get("result")
+                if tool_name == "get_token_approvals" and isinstance(result, dict):
+                    err = result.get("error")
+                    if err:
+                        print_warning(f"Approval audit incomplete: {err}")
+
+        elif ev_type == _EV_TOOL_DUPLICATE:
+            # Suppress entirely in normal mode.
+            pass
+
+        elif ev_type == _EV_TOOL_END:
+            tool_depth = max(0, tool_depth - 1)
+
+        elif ev_type == _EV_USAGE:
+            # Flush any remaining text before usage summary
+            if last_flush_len < len(accumulated_text):
+                console.print(
+                    accumulated_text[last_flush_len:],
+                    soft_wrap=True,
                 )
+                last_flush_len = len(accumulated_text)
+            console.print()  # Blank line before summary
+            if isinstance(data, dict):
+                _print_usage_summary(data)
 
-            elif ev_type == _EV_TOOL_END:
-                tool_depth = max(0, tool_depth - 1)
-                if tool_depth == 0:
-                    # Clear inline indicator; response text continues
-                    live.update(Markdown(_strip_surface_payload(accumulated_text)))
+        elif ev_type == _EV_BILLING:
+            if isinstance(data, dict):
+                _print_billing_settlement(data)
 
-            elif ev_type == _EV_USAGE:
-                # Print usage summary below the response
-                if isinstance(data, dict):
-                    _print_usage_summary(data)
+        elif ev_type == _EV_ERROR:
+            msg = ""
+            if isinstance(data, dict):
+                msg = data.get("message", str(data))
+            elif isinstance(data, str):
+                msg = data
+            print_error(f"Agent error: {msg}")
+            return
 
-            elif ev_type == _EV_BILLING:
-                if isinstance(data, dict):
-                    _print_billing_settlement(data)
+        elif ev_type == _EV_DONE:
+            # Flush any remaining text on completion
+            if last_flush_len < len(accumulated_text):
+                console.print(accumulated_text[last_flush_len:], soft_wrap=True)
+                last_flush_len = len(accumulated_text)
+            break
 
-            elif ev_type == _EV_ERROR:
-                msg = ""
-                if isinstance(data, dict):
-                    msg = data.get("message", str(data))
-                elif isinstance(data, str):
-                    msg = data
-                live.stop()
-                print_error(f"Agent error: {msg}")
-                return
-
-            elif ev_type == _EV_DONE:
-                break
+    # Flush any remaining accumulated text (only if we didn't see DONE/USAGE)
+    if last_flush_len < len(accumulated_text):
+        console.print(accumulated_text[last_flush_len:], soft_wrap=True)
 
     # Ensure a newline after streaming output
     console.print()
