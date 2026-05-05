@@ -5,7 +5,7 @@ from __future__ import annotations
 # Minimal, valid CreateOrgToolRequest with placeholders flagged clearly.
 _BASE_TEMPLATE = {
     "name": "{name}",
-    "description": "TODO: Describe what this tool does in one sentence.",
+    "description": "Short one-line summary of what this tool does.",
     "webhook_url": "https://example.com/your-webhook-endpoint",
     "input_schema": {
         "type": "object",
@@ -24,7 +24,7 @@ _BASE_TEMPLATE = {
 # Marketplace-extension fields. Surfaced when --with-marketplace is passed.
 _MARKETPLACE_EXTENSION = {
     "publish_as_mcp": True,
-    "marketplace_description": "TODO: One-line marketplace pitch (≤ 200 chars).",
+    "marketplace_description": "One-line marketplace pitch (max 200 characters).",
     "base_price_usdc": 1000,  # $0.001 per call (atomic units, 6 decimals)
 }
 

@@ -5,14 +5,16 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 from pathlib import Path
 from typing import Annotated, Any
 
+import httpx
 import typer
 
 app = typer.Typer(
     name="tools",
-    help="Org tools — publish, list, info, update, pause, delete.",
+    help="Org tools — publish, list, info, update, pause, probe, delete.",
     no_args_is_help=True,
 )
 
@@ -451,6 +453,109 @@ def pause(
     print_success(
         f"{name} paused. Run `teardrop tools update {name} --active` to re-enable."
     )
+
+
+# ---------------------------------------------------------------------------
+# probe
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def probe(
+    name: Annotated[str, typer.Argument(help="Tool name.")],
+    timeout: Annotated[
+        int,
+        typer.Option(
+            "--timeout",
+            min=1,
+            help="Webhook probe timeout in seconds.",
+        ),
+    ] = 10,
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
+) -> None:
+    """Probe a tool webhook and report status code and latency."""
+    from teardrop_cli import config
+    from teardrop_cli.formatting import (
+        print_error,
+        print_json,
+        print_success,
+        print_warning,
+        spinner,
+    )
+
+    client = config.get_client(base_url)
+
+    async def _do() -> tuple[str | None, dict[str, Any] | None]:
+        try:
+            tool_id = await _resolve_tool_id(client, name)
+            if tool_id is None:
+                return None, None
+
+            tool = await client.get_tool(tool_id)
+            data = tool.model_dump() if hasattr(tool, "model_dump") else dict(tool)
+            webhook_url = data.get("webhook_url")
+            return webhook_url, data
+        finally:
+            await client.close()
+
+    with spinner(f"Resolving webhook for {name}…"):
+        webhook_url, _tool_data = asyncio.run(_do())
+
+    if webhook_url is None:
+        print_error(f"Tool {name!r} not found.")
+        raise typer.Exit(1)
+
+    if not webhook_url:
+        print_error(f"Tool {name!r} has no webhook URL configured.")
+        raise typer.Exit(1)
+
+    async def _probe() -> tuple[int | None, float, str | None]:
+        start = time.perf_counter()
+        try:
+            async with httpx.AsyncClient(timeout=float(timeout)) as http:
+                response = await http.post(webhook_url, json={"_probe": True})
+            latency_ms = (time.perf_counter() - start) * 1000
+            return int(response.status_code), latency_ms, None
+        except httpx.TimeoutException:
+            latency_ms = (time.perf_counter() - start) * 1000
+            return None, latency_ms, f"Timed out after {timeout}s."
+        except httpx.HTTPError as exc:
+            latency_ms = (time.perf_counter() - start) * 1000
+            return None, latency_ms, str(exc)
+
+    with spinner(f"Probing {webhook_url}…"):
+        status_code, latency_ms, error = asyncio.run(_probe())
+
+    payload = {
+        "tool": name,
+        "webhook_url": webhook_url,
+        "status_code": status_code,
+        "latency_ms": round(latency_ms, 2),
+        "ok": bool(status_code is not None and status_code < 500),
+        "error": error,
+    }
+    if as_json:
+        print_json(payload)
+        if error or (status_code is not None and status_code >= 500):
+            raise typer.Exit(1)
+        return
+
+    if error:
+        print_error(f"Probe failed: {error}")
+        raise typer.Exit(1)
+
+    assert status_code is not None
+    if status_code >= 500:
+        print_error(f"Webhook returned {status_code} in {latency_ms:.0f}ms.")
+        raise typer.Exit(1)
+    if status_code >= 400:
+        print_warning(
+            f"Webhook reachable but returned {status_code} in {latency_ms:.0f}ms."
+        )
+        return
+
+    print_success(f"Webhook healthy: {status_code} in {latency_ms:.0f}ms.")
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 
 from click.testing import CliRunner
@@ -111,6 +112,96 @@ class TestPause:
         result = runner.invoke(app, ["tools", "pause", "my_tool"])
         assert result.exit_code == 0, result.output
         mock_client.update_tool.assert_awaited()
+
+
+class TestProbe:
+    def test_probe_success(
+        self, runner: CliRunner, patch_get_client, mock_client, monkeypatch
+    ):
+        mock_client.list_tools.return_value = [_tool_obj()]
+        mock_client.get_tool = AsyncMock(return_value=_tool_obj())
+
+        class _Response:
+            status_code = 200
+
+        class _AsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, *args, **kwargs):
+                return _Response()
+
+        monkeypatch.setattr("teardrop_cli.commands.tools.httpx.AsyncClient", _AsyncClient)
+
+        result = runner.invoke(app, ["tools", "probe", "my_tool"])
+        assert result.exit_code == 0, result.output
+        assert "Webhook healthy" in result.output
+
+    def test_probe_timeout(
+        self, runner: CliRunner, patch_get_client, mock_client, monkeypatch
+    ):
+        import httpx
+
+        mock_client.list_tools.return_value = [_tool_obj()]
+        mock_client.get_tool = AsyncMock(return_value=_tool_obj())
+
+        class _AsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, *args, **kwargs):
+                raise httpx.ReadTimeout("timed out")
+
+        monkeypatch.setattr("teardrop_cli.commands.tools.httpx.AsyncClient", _AsyncClient)
+
+        result = runner.invoke(app, ["tools", "probe", "my_tool"])
+        assert result.exit_code == 1
+        assert "Timed out" in result.output
+
+    def test_probe_server_error(
+        self, runner: CliRunner, patch_get_client, mock_client, monkeypatch
+    ):
+        mock_client.list_tools.return_value = [_tool_obj()]
+        mock_client.get_tool = AsyncMock(return_value=_tool_obj())
+
+        class _Response:
+            status_code = 500
+
+        class _AsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, *args, **kwargs):
+                return _Response()
+
+        monkeypatch.setattr("teardrop_cli.commands.tools.httpx.AsyncClient", _AsyncClient)
+
+        result = runner.invoke(app, ["tools", "probe", "my_tool"])
+        assert result.exit_code == 1
+        assert "returned 500" in result.output
+
+    def test_probe_tool_not_found(self, runner: CliRunner, patch_get_client):
+        result = runner.invoke(app, ["tools", "probe", "missing"])
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
 
 
 class TestDelete:
