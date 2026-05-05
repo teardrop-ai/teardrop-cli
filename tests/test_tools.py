@@ -134,7 +134,7 @@ class TestProbe:
             async def __aexit__(self, exc_type, exc, tb):
                 return False
 
-            async def post(self, *args, **kwargs):
+            async def request(self, *args, **kwargs):
                 return _Response()
 
         monkeypatch.setattr("teardrop_cli.commands.tools.httpx.AsyncClient", _AsyncClient)
@@ -142,6 +142,83 @@ class TestProbe:
         result = runner.invoke(app, ["tools", "probe", "my_tool"])
         assert result.exit_code == 0, result.output
         assert "Webhook healthy" in result.output
+
+    def test_probe_with_auth_header_and_payload(
+        self, runner: CliRunner, patch_get_client, mock_client, monkeypatch
+    ):
+        captured = {}
+        mock_client.list_tools.return_value = [_tool_obj()]
+        mock_client.get_tool = AsyncMock(return_value=_tool_obj())
+
+        class _Response:
+            status_code = 200
+
+        class _AsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def request(self, method, url, **kwargs):
+                captured["method"] = method
+                captured["url"] = url
+                captured["headers"] = kwargs.get("headers")
+                captured["json"] = kwargs.get("json")
+                return _Response()
+
+        monkeypatch.setattr("teardrop_cli.commands.tools.httpx.AsyncClient", _AsyncClient)
+
+        result = runner.invoke(
+            app,
+            [
+                "tools",
+                "probe",
+                "my_tool",
+                "--method",
+                "POST",
+                "--payload",
+                '{"ping": "pong"}',
+                "--auth-header-name",
+                "X-Webhook-Secret",
+                "--auth-header-value",
+                "s3cr3t",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert captured["method"] == "POST"
+        assert captured["json"] == {"ping": "pong"}
+        assert captured["headers"]["X-Webhook-Secret"] == "s3cr3t"
+
+    def test_probe_auth_header_pair_required(
+        self, runner: CliRunner, patch_get_client, mock_client
+    ):
+        mock_client.list_tools.return_value = [_tool_obj()]
+        mock_client.get_tool = AsyncMock(return_value=_tool_obj())
+        result = runner.invoke(
+            app,
+            [
+                "tools",
+                "probe",
+                "my_tool",
+                "--auth-header-name",
+                "X-Webhook-Secret",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "required together" in result.output
+
+    def test_probe_invalid_payload(
+        self, runner: CliRunner, patch_get_client, mock_client
+    ):
+        mock_client.list_tools.return_value = [_tool_obj()]
+        mock_client.get_tool = AsyncMock(return_value=_tool_obj())
+        result = runner.invoke(app, ["tools", "probe", "my_tool", "--payload", "not-json"])
+        assert result.exit_code == 1
+        assert "Invalid JSON" in result.output
 
     def test_probe_timeout(
         self, runner: CliRunner, patch_get_client, mock_client, monkeypatch
@@ -161,7 +238,7 @@ class TestProbe:
             async def __aexit__(self, exc_type, exc, tb):
                 return False
 
-            async def post(self, *args, **kwargs):
+            async def request(self, *args, **kwargs):
                 raise httpx.ReadTimeout("timed out")
 
         monkeypatch.setattr("teardrop_cli.commands.tools.httpx.AsyncClient", _AsyncClient)
@@ -189,7 +266,7 @@ class TestProbe:
             async def __aexit__(self, exc_type, exc, tb):
                 return False
 
-            async def post(self, *args, **kwargs):
+            async def request(self, *args, **kwargs):
                 return _Response()
 
         monkeypatch.setattr("teardrop_cli.commands.tools.httpx.AsyncClient", _AsyncClient)

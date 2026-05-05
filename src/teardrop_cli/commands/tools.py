@@ -463,6 +463,17 @@ def pause(
 @app.command()
 def probe(
     name: Annotated[str, typer.Argument(help="Tool name.")],
+    method: Annotated[
+        str,
+        typer.Option("--method", help="HTTP method for webhook probe."),
+    ] = "POST",
+    payload: Annotated[
+        str,
+        typer.Option(
+            "--payload",
+            help="JSON payload string for webhook probe.",
+        ),
+    ] = '{"_probe": true}',
     timeout: Annotated[
         int,
         typer.Option(
@@ -471,6 +482,21 @@ def probe(
             help="Webhook probe timeout in seconds.",
         ),
     ] = 10,
+    auth_header_name: Annotated[
+        str | None,
+        typer.Option(
+            "--auth-header-name",
+            help="Optional auth header name to include in probe request.",
+        ),
+    ] = None,
+    auth_header_value: Annotated[
+        str | None,
+        typer.Option(
+            "--auth-header-value",
+            help="Optional auth header value to include in probe request.",
+            hide_input=True,
+        ),
+    ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
@@ -500,7 +526,7 @@ def probe(
             await client.close()
 
     with spinner(f"Resolving webhook for {name}…"):
-        webhook_url, _tool_data = asyncio.run(_do())
+        webhook_url, tool_data = asyncio.run(_do())
 
     if webhook_url is None:
         print_error(f"Tool {name!r} not found.")
@@ -510,11 +536,54 @@ def probe(
         print_error(f"Tool {name!r} has no webhook URL configured.")
         raise typer.Exit(1)
 
+    if bool(auth_header_name) != bool(auth_header_value):
+        print_error(
+            "Both --auth-header-name and --auth-header-value are required together."
+        )
+        raise typer.Exit(1)
+
+    if tool_data and tool_data.get("has_auth") and not auth_header_name:
+        print_warning(
+            "This tool appears to use webhook auth. Pass --auth-header-name and --auth-header-value to avoid false failures."
+        )
+
+    method = method.strip().upper()
+    if not method:
+        print_error("--method cannot be empty.")
+        raise typer.Exit(1)
+
+    try:
+        parsed_payload: dict[str, Any] = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        print_error(f"Invalid JSON for --payload: {exc}")
+        raise typer.Exit(1) from None
+
+    if not isinstance(parsed_payload, dict):
+        print_error("--payload must be a JSON object.")
+        raise typer.Exit(1)
+
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if auth_header_name and auth_header_value:
+        headers[auth_header_name] = auth_header_value
+
     async def _probe() -> tuple[int | None, float, str | None]:
         start = time.perf_counter()
         try:
             async with httpx.AsyncClient(timeout=float(timeout)) as http:
-                response = await http.post(webhook_url, json={"_probe": True})
+                if method in {"GET", "HEAD"}:
+                    response = await http.request(
+                        method,
+                        webhook_url,
+                        params=parsed_payload,
+                        headers=headers,
+                    )
+                else:
+                    response = await http.request(
+                        method,
+                        webhook_url,
+                        json=parsed_payload,
+                        headers=headers,
+                    )
             latency_ms = (time.perf_counter() - start) * 1000
             return int(response.status_code), latency_ms, None
         except httpx.TimeoutException:
@@ -530,6 +599,9 @@ def probe(
     payload = {
         "tool": name,
         "webhook_url": webhook_url,
+        "method": method,
+        "request_payload": parsed_payload,
+        "used_auth_header": bool(auth_header_name and auth_header_value),
         "status_code": status_code,
         "latency_ms": round(latency_ms, 2),
         "ok": bool(status_code is not None and status_code < 500),

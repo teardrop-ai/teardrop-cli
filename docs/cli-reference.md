@@ -171,6 +171,33 @@ teardrop tools delete get_weather
 teardrop tools delete get_weather --yes              # skip confirmation
 ```
 
+### Test webhook health
+
+Before publishing or after updating a webhook URL, test it:
+
+```bash
+teardrop tools probe get_weather                    # test default POST request
+teardrop tools probe get_weather --json             # output as JSON
+teardrop tools probe get_weather --timeout 30       # override timeout
+```
+
+If your webhook requires auth headers, supply them:
+
+```bash
+teardrop tools probe get_weather \
+  --auth-header-name X-Webhook-Secret \
+  --auth-header-value s3cr3t
+```
+
+Customize the probe request:
+
+```bash
+teardrop tools probe get_weather --method GET
+teardrop tools probe get_weather --payload '{"test": "data"}'
+```
+
+Exit code: 0 on success (2xx–3xx), 1 on timeout/5xx/connection error. Warning (exit 0) on 4xx responses (e.g., auth failures).
+
 ---
 
 ## Marketplace

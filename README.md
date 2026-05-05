@@ -78,6 +78,7 @@ Scaffold a starter spec, edit it, and publish:
 ```bash
 teardrop tools init my_scraper       # writes ./tool.json
 $EDITOR tool.json                    # set webhook_url, schema, price
+teardrop tools probe my_scraper      # test webhook health before publishing
 teardrop tools publish --from-file tool.json \
     --settlement-wallet 0xYourChecksumAddress
 ```
@@ -90,7 +91,9 @@ teardrop tools publish
 
 Tool name rules: `^[a-z][a-z0-9_]*$`, ≤ 64 chars. Prices are in atomic USDC (6 decimals): `5000` = **$0.005** per call. Settlement wallet is required once before your first payout.
 
-Manage existing tools: `teardrop tools list | info | update | pause | delete`. Full reference: [docs/cli-reference.md](docs/cli-reference.md#tool-management).
+Test your webhook before publishing with `teardrop tools probe <tool-name>`. Optionally pass `--auth-header-name` and `--auth-header-value` if your webhook requires auth, or use `--method` and `--payload` to customize the probe request.
+
+Manage existing tools: `teardrop tools list | info | update | pause | delete | probe`. Full reference: [docs/cli-reference.md](docs/cli-reference.md#tool-management).
 
 ---
 
