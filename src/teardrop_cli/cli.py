@@ -23,7 +23,6 @@ from teardrop_cli._lazy import LazyGroup
         "config": "teardrop_cli.commands.config_cmd:app",
         "run": "teardrop_cli.commands.run:app",
         "balance": "teardrop_cli.commands.balance:app",
-        "topup": "teardrop_cli.commands.topup:app",
         "usage": "teardrop_cli.commands.usage:app",
         "marketplace": "teardrop_cli.commands.marketplace:app",
         "tools": "teardrop_cli.commands.tools:app",

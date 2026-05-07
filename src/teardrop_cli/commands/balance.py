@@ -23,13 +23,28 @@ def _fmt_usdc(atomic: int | None) -> str:
 @click.option("--base-url", "base_url", default=None, hidden=True)
 def app(as_json: bool, base_url: str | None) -> None:
     from teardrop_cli import config
-    from teardrop_cli.formatting import console, print_json, print_table, spinner
+    from teardrop_cli.formatting import (
+        console,
+        handle_token_expiry,
+        print_json,
+        print_table,
+        spinner,
+    )
 
     client = config.get_client(base_url)
 
     async def _fetch():
         try:
             return await client.get_balance()
+        except Exception as exc:
+            if await handle_token_expiry(exc, base_url):
+                # Retry with new client (which will use email+secret auto-refresh)
+                new_client = config.get_client(base_url)
+                try:
+                    return await new_client.get_balance()
+                finally:
+                    await new_client.close()
+            raise
         finally:
             await client.close()
 

@@ -52,6 +52,43 @@ def print_warning(message: str) -> None:
     console.print(f"[bold yellow]⚠[/bold yellow]  {message}")
 
 
+async def handle_token_expiry(exc: Exception, base_url: str | None = None) -> bool:
+    """Handle AuthenticationError by checking for fallback credentials.
+
+    If fallback credentials (email+secret) exist, they will have higher priority
+    in the next ``config.get_client()`` call thanks to the priority reordering.
+    This helper returns True if the caller should retry the command, or
+    False/raises SystemExit if no recovery is possible.
+    """
+    from teardrop import AuthenticationError
+
+    if not isinstance(exc, AuthenticationError):
+        return False
+
+    # Check if the error is specifically about expiration
+    msg = str(exc).lower()
+    if "expired" not in msg and "token" not in msg:
+        return False
+
+    from teardrop_cli import config
+
+    # If we have email credentials in the keyring, reordering guarantees
+    # they will be used on the next get_client() call.
+    if config.has_existing_credentials():
+        # verify it's not JUST a static token
+        cfg = config.load_config()
+        has_email = bool(cfg.get("email"))
+        if has_email:
+            print_warning("Session expired. Attempting auto-refresh...")
+            return True
+
+    print_error(
+        "Your session has expired.",
+        hint="Run [bold]teardrop auth login[/bold] to sign in again.",
+    )
+    raise SystemExit(1)
+
+
 # ---------------------------------------------------------------------------
 # Spinner / status context manager
 # ---------------------------------------------------------------------------

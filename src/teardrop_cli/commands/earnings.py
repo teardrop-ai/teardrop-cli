@@ -37,13 +37,26 @@ def balance(
 ) -> None:
     """Show your marketplace earnings balance."""
     from teardrop_cli import config
-    from teardrop_cli.formatting import print_json, print_table, spinner
+    from teardrop_cli.formatting import (
+        handle_token_expiry,
+        print_json,
+        print_table,
+        spinner,
+    )
 
     client = config.get_client(base_url)
 
     async def _fetch():
         try:
             return await client.get_marketplace_balance()
+        except Exception as exc:
+            if await handle_token_expiry(exc, base_url):
+                new_client = config.get_client(base_url)
+                try:
+                    return await new_client.get_marketplace_balance()
+                finally:
+                    await new_client.close()
+            raise
         finally:
             await client.close()
 

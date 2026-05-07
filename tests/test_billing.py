@@ -37,36 +37,3 @@ class TestUsage:
         assert result.exit_code == 0, result.output
         mock_client.get_usage.assert_awaited()
 
-
-class TestTopupUsdc:
-    def test_topup_usdc(self, runner: CliRunner, patch_get_client, mock_client):
-        result = runner.invoke(app, ["topup", "usdc", "--amount", "10.00"])
-        assert result.exit_code == 0, result.output
-        mock_client.get_usdc_topup_requirements.assert_awaited()
-
-    def test_topup_usdc_invalid_amount(
-        self, runner: CliRunner, patch_get_client
-    ):
-        result = runner.invoke(app, ["topup", "usdc", "--amount", "not-a-number"])
-        assert result.exit_code == 1
-
-
-class TestTopupStripe:
-    def test_topup_stripe_no_browser(
-        self, runner: CliRunner, patch_get_client, mock_client, monkeypatch
-    ):
-        # Mock get_stripe_topup_status to return complete on first poll
-        result = runner.invoke(
-            app,
-            [
-                "topup",
-                "stripe",
-                "--amount",
-                "5.00",
-                "--no-browser",
-                "--poll-timeout",
-                "5",
-            ],
-        )
-        assert result.exit_code == 0, result.output
-        mock_client.topup_stripe.assert_awaited()

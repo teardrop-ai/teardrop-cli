@@ -29,7 +29,8 @@ def _run_quickstart(base_url: str | None) -> None:
     )
 
     # 1. Auth — skip if creds already present.
-    if _has_existing_credentials():
+    from teardrop_cli import config
+    if config.has_existing_credentials():
         console.print("[dim]Existing credentials detected.[/dim]")
         if typer.confirm("Use them?", default=True):
             print_success("Using existing credentials.")

@@ -6,8 +6,8 @@ Credential resolution order (highest priority first):
   1. ``TEARDROP_API_KEY`` env var (or legacy ``TEARDROP_TOKEN``) — static JWT, no auto-refresh
   2. ``TEARDROP_EMAIL`` + ``TEARDROP_SECRET`` env vars — auto-refresh via TokenManager
   3. ``TEARDROP_CLIENT_ID`` + ``TEARDROP_CLIENT_SECRET`` env vars — M2M
-  4. Stored access_token in config file (with optional refresh_token)
-  5. Stored email + secret (keyring) or client credentials (keyring)
+  4. Stored email + secret (keyring) or client credentials (keyring)
+  5. Stored access_token in config file (with optional refresh_token)
 """
 
 from __future__ import annotations
@@ -228,6 +228,37 @@ def init_config_file() -> Path:
     return cfg_path
 
 
+def has_existing_credentials() -> bool:
+    """True if get_client() would likely succeed without prompting the user."""
+    # Env vars (priorities 1-3)
+    if os.environ.get("TEARDROP_API_KEY") or os.environ.get("TEARDROP_TOKEN"):
+        return True
+    if os.environ.get("TEARDROP_EMAIL") and os.environ.get("TEARDROP_SECRET"):
+        return True
+    if os.environ.get("TEARDROP_CLIENT_ID") and os.environ.get("TEARDROP_CLIENT_SECRET"):
+        return True
+
+    # Stored email + secret (keyring)
+    if _keyring_available():
+        import keyring
+
+        email = keyring.get_password(_KEYRING_SERVICE, _KEYRING_EMAIL_KEY)
+        secret = keyring.get_password(_KEYRING_SERVICE, _KEYRING_SECRET_KEY)
+        if email and secret:
+            return True
+        cid = keyring.get_password(_KEYRING_SERVICE, _KEYRING_CLIENT_ID_KEY)
+        csecret = keyring.get_password(_KEYRING_SERVICE, _KEYRING_CLIENT_SECRET_KEY)
+        if cid and csecret:
+            return True
+
+    # Config file
+    cfg = load_config()
+    if cfg.get("access_token") or cfg.get("auth", {}).get("token"):
+        return True
+
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Client factory
 # ---------------------------------------------------------------------------
@@ -265,15 +296,7 @@ def get_client(base_url: str | None = None, *, require_auth: bool = True):
     if cid_env and csecret_env:
         return AsyncTeardropClient(url, client_id=cid_env, client_secret=csecret_env)
 
-    # 4. Stored access_token
-    cfg = load_config()
-    if token := cfg.get("access_token"):
-        return AsyncTeardropClient(url, token=token)
-    # Legacy nested location
-    if token := cfg.get("auth", {}).get("token"):
-        return AsyncTeardropClient(url, token=token)
-
-    # 5. Stored email + secret (keyring)
+    # 4. Stored email + secret (keyring)
     if _keyring_available():
         import keyring
 
@@ -286,6 +309,14 @@ def get_client(base_url: str | None = None, *, require_auth: bool = True):
         csecret = keyring.get_password(_KEYRING_SERVICE, _KEYRING_CLIENT_SECRET_KEY)
         if cid and csecret:
             return AsyncTeardropClient(url, client_id=cid, client_secret=csecret)
+
+    # 5. Stored access_token
+    cfg = load_config()
+    if token := cfg.get("access_token"):
+        return AsyncTeardropClient(url, token=token)
+    # Legacy nested location
+    if token := cfg.get("auth", {}).get("token"):
+        return AsyncTeardropClient(url, token=token)
 
     if not require_auth:
         return AsyncTeardropClient(url)

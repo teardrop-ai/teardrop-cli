@@ -130,13 +130,13 @@ teardrop run "..." --json --with-ui
 
 Streaming output renders Markdown live with inline tool calls. A token + cost summary prints at the end. By default, CLI output is optimized for scripting and automation (`emit_ui=false`); use `--with-ui` only if you need structured UI component data in the JSON output.
 
-If a run fails on credit, top up:
+If a run fails on credit, top up via the dashboard:
 
 ```bash
-teardrop topup stripe --amount 25.00     # credit card
-teardrop topup usdc   --amount 25.00     # on-chain x402
-teardrop balance
+teardrop balance   # check credits
 ```
+
+To add credits, visit [teardrop.dev](https://teardrop.dev).
 
 ---
 

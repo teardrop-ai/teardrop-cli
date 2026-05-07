@@ -86,6 +86,8 @@ teardrop run "..." --json
 
 Streaming output renders Markdown live with inline tool calls. A token + cost summary prints at the end.
 
+`--json` output schema is documented in [docs/cli-json-schema.md](./cli-json-schema.md).
+
 ---
 
 ## Billing & Credits
@@ -98,22 +100,13 @@ teardrop usage --start 2026-01-01 --end 2026-01-31
 teardrop usage --json
 ```
 
-### Top up via Stripe (credit card)
+### Adding Credits
 
-```bash
-teardrop topup stripe --amount 25.00
-teardrop topup stripe --amount 25.00 --no-browser     # print URL instead of opening browser
-```
+The CLI does not support direct top-ups. To add credits or manage your billing methods, please visit the dashboard:
 
-The CLI polls for completion and prints the new balance when payment confirms.
+[https://teardrop.dev/billing](https://teardrop.dev/billing)
 
-### Top up via USDC (on-chain)
-
-```bash
-teardrop topup usdc --amount 25.00
-```
-
-Prints an x402 payment description. Send USDC to the given address; balance updates after the tx confirms.
+If you run out of credits during an agent run, the agent will pause and provide this link.
 
 ---
 

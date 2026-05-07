@@ -63,9 +63,30 @@ def app(
 
     client = config.get_client(base_url)
 
+    async def _run_command():
+        from teardrop_cli.formatting import handle_token_expiry
+        
+        nonlocal client
+        try:
+            if as_json or no_stream:
+                return await _collect(client, message, thread, context, emit_ui=with_ui)
+            else:
+                await _stream(client, message, thread, context, emit_ui=with_ui)
+                return None
+        except Exception as exc:
+            if await handle_token_expiry(exc, base_url):
+                # Re-fetch client and retry
+                client = config.get_client(base_url)
+                if as_json or no_stream:
+                    return await _collect(client, message, thread, context, emit_ui=with_ui)
+                else:
+                    await _stream(client, message, thread, context, emit_ui=with_ui)
+                    return None
+            raise
+
     if as_json or no_stream:
         try:
-            text = asyncio.run(_collect(client, message, thread, context, emit_ui=with_ui))
+            text = asyncio.run(_run_command())
         except Exception as exc:  # noqa: BLE001
             _handle_run_error(exc)
             raise click.exceptions.Exit(1) from None
@@ -77,7 +98,7 @@ def app(
         return
 
     try:
-        asyncio.run(_stream(client, message, thread, context, emit_ui=with_ui))
+        asyncio.run(_run_command())
     except Exception as exc:  # noqa: BLE001
         _handle_run_error(exc)
         raise click.exceptions.Exit(1) from None
@@ -145,7 +166,7 @@ def _handle_run_error(exc: BaseException) -> None:
     if name == "PaymentRequiredError" or "402" in msg:
         print_error(
             "Insufficient credit.",
-            hint="Run: `teardrop topup stripe --amount 10.00`",
+            hint="Topup at: https://teardrop.dev/billing",
         )
         return
     if name == "RateLimitError" or "429" in msg:
