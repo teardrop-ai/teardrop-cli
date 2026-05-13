@@ -29,6 +29,7 @@ class TestQuickstartCredCheck:
 
         # mock_keyring fixture (autouse) provides an in-memory keyring backend.
         import keyring
+
         from teardrop_cli.config import _KEYRING_EMAIL_KEY, _KEYRING_SECRET_KEY, _KEYRING_SERVICE
         keyring.set_password(_KEYRING_SERVICE, _KEYRING_EMAIL_KEY, "user@example.com")
         keyring.set_password(_KEYRING_SERVICE, _KEYRING_SECRET_KEY, "hunter2")

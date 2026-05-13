@@ -62,7 +62,13 @@ def signup(
     import httpx
 
     from teardrop_cli import config
-    from teardrop_cli.formatting import print_error, print_json, print_success, print_warning, spinner
+    from teardrop_cli.formatting import (
+        print_error,
+        print_json,
+        print_success,
+        print_warning,
+        spinner,
+    )
 
     url = base_url or config.get_base_url()
 

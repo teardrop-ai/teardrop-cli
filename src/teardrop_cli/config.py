@@ -253,10 +253,7 @@ def has_existing_credentials() -> bool:
 
     # Config file
     cfg = load_config()
-    if cfg.get("access_token") or cfg.get("auth", {}).get("token"):
-        return True
-
-    return False
+    return bool(cfg.get("access_token") or cfg.get("auth", {}).get("token"))
 
 
 # ---------------------------------------------------------------------------

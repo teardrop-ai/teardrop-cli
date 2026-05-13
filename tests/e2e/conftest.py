@@ -21,7 +21,6 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-
 # ---------------------------------------------------------------------------
 # Guard: skip every test in this package unless TEARDROP_E2E=1
 # ---------------------------------------------------------------------------

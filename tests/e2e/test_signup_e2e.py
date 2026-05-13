@@ -25,7 +25,6 @@ from click.testing import CliRunner
 
 from teardrop_cli.cli import app
 
-
 pytestmark = pytest.mark.e2e
 
 

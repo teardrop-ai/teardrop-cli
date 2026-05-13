@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
@@ -393,10 +392,7 @@ def _print_billing_settlement(data: dict) -> None:
 
 def confirm(message: str, *, default: bool = False) -> bool:
     """Prompt the user for a yes/no confirmation on stderr."""
-    if default:
-        suffix = " ([bold green]Y[/bold green]/n) "
-    else:
-        suffix = " ([bold green]y[/bold green]/N) "
+    suffix = " ([bold green]Y[/bold green]/n) " if default else " ([bold green]y[/bold green]/N) "
     try:
         answer = console.input(f"[bold]{message}[/bold]{suffix}").strip().lower()
     except (EOFError, KeyboardInterrupt):

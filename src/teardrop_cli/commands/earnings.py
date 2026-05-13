@@ -215,7 +215,7 @@ def withdraw(
         return
 
     print_success(
-        f"Withdrawal initiated. Transaction may take 1–5 minutes on-chain."
+        "Withdrawal initiated. Transaction may take 1–5 minutes on-chain."
     )
 
 

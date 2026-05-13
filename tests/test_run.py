@@ -87,8 +87,9 @@ class TestSSEContract:
 
     def test_run_ignores_surface_update(self, runner: CliRunner, patch_get_client, mock_client):
         async def _emit(*args, **kwargs):
-            from teardrop_cli._fixtures import build_text_event
             from unittest.mock import MagicMock
+
+            from teardrop_cli._fixtures import build_text_event
             
             yield build_text_event("Narrative start.")
             

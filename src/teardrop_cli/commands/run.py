@@ -106,6 +106,7 @@ def app(
 
 async def _stream(client, message: str, thread: str | None, context: dict | None, *, emit_ui: bool = False) -> None:
     from contextlib import aclosing
+
     from teardrop_cli.formatting import _render_stream
 
     try:
