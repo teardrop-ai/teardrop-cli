@@ -71,6 +71,71 @@ class TestToolsInit:
         assert "invalid" in result.output.lower()
         assert not out.exists()
 
+    def test_base_template_full_shape(self, runner: CliRunner, tmp_path: Path):
+        """Base scaffold includes ALL fields with correct defaults."""
+        out = tmp_path / "tool.json"
+        runner.invoke(app, ["tools", "init", "test_tool1", "--out", str(out)])
+        data = json.loads(out.read_text())
+
+        # Every expected key present in the right order.
+        keys = list(data.keys())
+        assert keys == [
+            "name", "description", "input_schema", "output_schema",
+            "webhook_url", "webhook_method", "auth_header_name",
+            "auth_header_value", "timeout_seconds", "publish_as_mcp",
+            "marketplace_description", "category", "base_price_usdc",
+        ]
+
+        # Input schema has additionalProperties: false
+        assert data["input_schema"]["additionalProperties"] is False
+        assert data["input_schema"]["required"] == ["query"]
+
+        # Output schema is always present with additionalProperties: true
+        assert data["output_schema"]["additionalProperties"] is True
+        assert data["output_schema"]["required"] == ["result"]
+
+        # Webhook defaults
+        assert data["webhook_method"] == "GET"
+        assert data["auth_header_name"] is None
+        assert data["auth_header_value"] is None
+
+        # Marketplace defaults
+        assert data["publish_as_mcp"] is False
+        assert data["marketplace_description"] is None
+        assert data["category"] == ""
+        assert data["base_price_usdc"] == 0
+
+    def test_with_marketplace_full_shape(self, runner: CliRunner, tmp_path: Path):
+        """Marketplace variant keeps all keys; only publish flag + desc change."""
+        out = tmp_path / "tool.json"
+        runner.invoke(
+            app,
+            ["tools", "init", "premium", "--out", str(out), "--with-marketplace"],
+        )
+        data = json.loads(out.read_text())
+
+        # Same key set as base
+        assert list(data.keys()) == [
+            "name", "description", "input_schema", "output_schema",
+            "webhook_url", "webhook_method", "auth_header_name",
+            "auth_header_value", "timeout_seconds", "publish_as_mcp",
+            "marketplace_description", "category", "base_price_usdc",
+        ]
+
+        # These flip from base defaults
+        assert data["publish_as_mcp"] is True
+        assert data["marketplace_description"] == (
+            "One-line marketplace pitch (max 200 characters)."
+        )
+
+        # Everything else identical to base
+        assert data["auth_header_name"] is None
+        assert data["auth_header_value"] is None
+        assert data["category"] == ""
+        assert data["base_price_usdc"] == 0
+        assert data["output_schema"]["additionalProperties"] is True
+        assert data["input_schema"]["additionalProperties"] is False
+
 
 # ---------------------------------------------------------------------------
 # llm-config byok

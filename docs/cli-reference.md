@@ -134,17 +134,30 @@ Example `tool.json`:
 {
   "name": "get_weather",
   "description": "Fetch current weather conditions for a given city.",
-  "webhook_url": "https://api.example.com/webhooks/teardrop",
   "input_schema": {
     "type": "object",
     "properties": {
       "city": { "type": "string", "description": "City name, e.g. 'London'" }
     },
-    "required": ["city"]
+    "required": ["city"],
+    "additionalProperties": false
   },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "result": { "type": "string", "description": "Weather summary for the requested city." }
+    },
+    "required": ["result"],
+    "additionalProperties": true
+  },
+  "webhook_url": "https://api.example.com/webhooks/teardrop",
+  "webhook_method": "GET",
+  "auth_header_name": null,
+  "auth_header_value": null,
   "timeout_seconds": 10,
   "publish_as_mcp": true,
   "marketplace_description": "Real-time weather data for any city worldwide.",
+  "category": "data",
   "base_price_usdc": 5000
 }
 ```

@@ -140,7 +140,10 @@ class TestStatus:
         """whoami should NOT exist anymore."""
         result = runner.invoke(app, ["auth", "whoami"])
         assert result.exit_code != 0
-        assert "No such command" in result.output or "whoami" in result.output
+        # Click 8.0.x stores a UsageError in result.exception with output
+        # only on stderr; Click 8.3+ stores SystemExit and writes the
+        # message to stdout.  Check both sources to stay compatible.
+        assert "No such command" in result.output or (result.exception and "No such command" in str(result.exception))
 
 
 # ---------------------------------------------------------------------------
