@@ -111,6 +111,7 @@ def benchmarks(
 
 def _print_public_benchmarks(models: list[dict]) -> None:
     """Render the global model catalogue table."""
+    from teardrop import format_usdc
     from teardrop_cli.formatting import print_table
 
     rows = []
@@ -129,8 +130,8 @@ def _print_public_benchmarks(models: list[dict]) -> None:
                 m.get("display_name", "—"),
                 str(m.get("quality_tier", "—")),
                 f"{int(p95)} ms" if p95 is not None else "—",
-                f"${cost_in:.4f}/1k" if cost_in is not None else "—",
-                f"${cost_out:.4f}/1k" if cost_out is not None else "—",
+                f"${format_usdc(int(cost_in))}/1k" if cost_in is not None else "—",
+                f"${format_usdc(int(cost_out))}/1k" if cost_out is not None else "—",
                 str(runs) if runs is not None else "—",
             ]
         )
@@ -154,6 +155,7 @@ def _print_public_benchmarks(models: list[dict]) -> None:
 def _print_org_benchmarks(models: list[dict], *, org_id: str) -> None:
     """Render the org-scoped benchmark table."""
     from teardrop_cli.formatting import data_console, print_table
+    from teardrop import format_usdc
 
     data_console.print(f"[bold]Your org's model usage (7-day aggregate) — {org_id}[/bold]")
 

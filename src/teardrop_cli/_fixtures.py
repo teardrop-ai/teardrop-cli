@@ -176,9 +176,9 @@ def make_benchmarks_response(models: list[dict] | None = None) -> MagicMock:
                 "supports_streaming": True,
                 "quality_tier": 2,
                 "pricing": {
-                    "tokens_in_cost_per_1k": 0.08,
-                    "tokens_out_cost_per_1k": 0.24,
-                    "tool_call_cost": 0.0,
+                    "tokens_in_cost_per_1k": 1_250.0,
+                    "tokens_out_cost_per_1k": 6_250.0,
+                    "tool_call_cost": 1_000.0,
                 },
                 "benchmarks": {
                     "total_runs_7d": 1250,
@@ -195,3 +195,57 @@ def make_benchmarks_response(models: list[dict] | None = None) -> MagicMock:
     obj.models = models
     obj.updated_at = data["updated_at"]
     return obj
+
+
+def make_pricing_response(
+    base_cost_usdc: int = 500,
+    tools: list[dict] | None = None,
+) -> MagicMock:
+    """Return a minimal BillingPricingResponse-like mock."""
+    if tools is None:
+        tools = [
+            {
+                "tool_name": "acme/weather",
+                "price_usdc": 5000,
+                "description": "Get the weather",
+            }
+        ]
+    data = {"tools": tools, "base_cost_usdc": base_cost_usdc, "updated_at": "2026-04-16T12:00:00Z"}
+    obj = MagicMock()
+    obj.model_dump = lambda: dict(data)
+    obj.tools = tools
+    obj.base_cost_usdc = base_cost_usdc
+    obj.updated_at = data["updated_at"]
+    return obj
+
+
+def make_credit_history_entries(
+    count: int = 3,
+) -> list[MagicMock]:
+    """Return a list of CreditHistoryEntry-like mocks.
+
+    Each mock has a ``model_dump`` method so the CLI can normalise it, matching
+    the real SDK's ``list[CreditHistoryEntry]`` return type.
+    """
+    entries = []
+    samples = [
+        {"reason": "Subscription fee — acme/weather", "amount_usdc": 5000, "operation": "debit"},
+        {"reason": "Top-up", "amount_usdc": 50_000_000, "operation": "topup"},
+        {"reason": "Agent run — code review", "amount_usdc": 1250, "operation": "debit"},
+    ]
+    for i in range(count):
+        base = samples[i % len(samples)]
+        data = {
+            "id": f"ch_{i}",
+            "amount_usdc": base["amount_usdc"],
+            "operation": base["operation"],
+            "balance_usdc_after": 100_000_000 - base["amount_usdc"] * (i + 1),
+            "reason": base["reason"],
+            "created_at": f"2026-06-{10 - i:02d}T12:00:00Z",
+        }
+        obj = MagicMock()
+        obj.model_dump = lambda d=data: dict(d)
+        for k, v in data.items():
+            setattr(obj, k, v)
+        entries.append(obj)
+    return entries

@@ -109,8 +109,8 @@ class TestModelsBenchmarks:
                         "display_name": "GPT-4o",
                         "quality_tier": 3,
                         "pricing": {
-                            "tokens_in_cost_per_1k": 0.30,
-                            "tokens_out_cost_per_1k": 1.20,
+                            "tokens_in_cost_per_1k": 1_500.0,
+                            "tokens_out_cost_per_1k": 7_500.0,
                         },
                         "benchmarks": None,
                     }
@@ -142,8 +142,8 @@ class TestModelsBenchmarksOrgExtended:
                         "display_name": "Claude Haiku 4.5",
                         "quality_tier": 2,
                         "pricing": {
-                            "tokens_in_cost_per_1k": 0.08,
-                            "tokens_out_cost_per_1k": 0.24,
+                            "tokens_in_cost_per_1k": 1_250.0,
+                            "tokens_out_cost_per_1k": 6_250.0,
                         },
                         "benchmarks": {
                             "total_runs_7d": 45,

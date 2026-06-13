@@ -370,3 +370,47 @@ class TestApprovalErrorSurfacing:
         result = runner.invoke(app, ["run", "check portfolio"])
         assert result.exit_code == 0, result.output
         assert "Approval audit incomplete" not in result.output
+
+
+class TestEstimateCost:
+    """Verify --estimate-cost uses local pricing data, never calls client.run()."""
+
+    def test_estimate_cost_shows_breakdown(self, runner: CliRunner, patch_get_client, mock_client):
+        """--estimate-cost prints a breakdown with estimated total."""
+        run_called = False
+        real_run = mock_client.run
+
+        async def _assert_run_not_called(*a, **kw):
+            nonlocal run_called
+            run_called = True
+            async for ev in real_run(*a, **kw):
+                yield ev
+
+        mock_client.run = _assert_run_not_called
+        result = runner.invoke(app, ["run", "hello", "--estimate-cost"])
+        assert result.exit_code == 0, result.output
+        assert not run_called, "client.run() must NOT be called during --estimate-cost"
+        assert "Estimated total" in result.output
+        assert "Model" in result.output
+        assert "USDC" in result.output
+        # Golden value: with default fixture rates (in=1_250, out=6_250 atomic/1k)
+        # and 1 input token / 4096 output tokens, token costs should be sub-cent.
+        # Input: 1_250 * 1 / 1000 = 1.25 ≈ 1 atomic => displayed as $0.000001
+        # Output: 6_250 * 4096 / 1000 = 25_600 atomic => displayed as $0.025600
+        assert "$0.000001" in result.output or "$0.000001" in result.output
+        assert "$0.025600" in result.output
+
+    def test_estimate_cost_with_exclude(self, runner: CliRunner, patch_get_client, mock_client):
+        """--estimate-cost --exclude should still work and not call run()."""
+        result = runner.invoke(app, ["run", "hello", "--estimate-cost", "--exclude", "acme/weather"])
+        assert result.exit_code == 0, result.output
+        assert "Estimated total" in result.output
+
+    def test_estimate_cost_with_context(self, runner: CliRunner, patch_get_client, mock_client):
+        """--estimate-cost --context should count context chars in token estimate."""
+        result = runner.invoke(
+            app, ["run", "hello", "--estimate-cost", "--context", '{"key":"value"}']
+        )
+        assert result.exit_code == 0, result.output
+        assert "Estimated total" in result.output
+        assert "Input tokens (est.)" in result.output

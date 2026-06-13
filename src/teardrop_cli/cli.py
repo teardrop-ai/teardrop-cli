@@ -24,6 +24,7 @@ from teardrop_cli._lazy import LazyGroup
         "run": "teardrop_cli.commands.run:app",
         "balance": "teardrop_cli.commands.balance:app",
         "usage": "teardrop_cli.commands.usage:app",
+        "agent-tools": "teardrop_cli.commands.agent_tools:app",
         "marketplace": "teardrop_cli.commands.marketplace:app",
         "tools": "teardrop_cli.commands.tools:app",
         "earnings": "teardrop_cli.commands.earnings:app",

@@ -318,6 +318,14 @@ def _publish_wizard() -> dict[str, Any]:
     else:
         input_schema = json.loads(Path(schema_input).read_text(encoding="utf-8"))
 
+    output_schema_input = typer.prompt(
+        "Output schema JSON file path [optional] (or '-' to skip)",
+        default="-",
+    )
+    output_schema: dict[str, Any] | None = None
+    if output_schema_input and output_schema_input != "-":
+        output_schema = json.loads(Path(output_schema_input).read_text(encoding="utf-8"))
+
     data: dict[str, Any] = {
         "name": name,
         "description": description,
@@ -326,6 +334,8 @@ def _publish_wizard() -> dict[str, Any]:
         "timeout_seconds": int(timeout),
         "publish_as_mcp": publish_as_mcp,
     }
+    if output_schema is not None:
+        data["output_schema"] = output_schema
     if auth_header_name:
         data["auth_header_name"] = auth_header_name
         data["auth_header_value"] = auth_header_value
@@ -360,6 +370,16 @@ def update(
     active: Annotated[
         bool | None, typer.Option("--active/--no-active", help="Activate or pause the tool.")
     ] = None,
+    output_schema_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-schema-file",
+            help="Path to output schema JSON file.",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
@@ -384,6 +404,14 @@ def update(
         payload["timeout_seconds"] = timeout
     if active is not None:
         payload["is_active"] = active
+    if output_schema_file is not None:
+        try:
+            payload["output_schema"] = json.loads(
+                output_schema_file.read_text(encoding="utf-8")
+            )
+        except json.JSONDecodeError as exc:
+            print_error(f"Invalid JSON in {output_schema_file}: {exc}")
+            raise typer.Exit(1) from None
 
     if not payload:
         print_error("No fields to update. Provide at least one --flag.")

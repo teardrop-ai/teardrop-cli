@@ -22,8 +22,8 @@ pytestmark = pytest.mark.e2e
 
 
 class TestBalance:
-    def test_balance_returns_numeric_usdc(self, live_runner) -> None:
-        """``balance --json`` returns a parseable dict with a numeric balance field."""
+    def test_balance_default_returns_numeric_usdc(self, live_runner) -> None:
+        """``balance --json`` (bare) returns a parseable dict with a numeric balance field."""
         result = live_runner.invoke(app, ["balance", "--json"])
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
@@ -33,10 +33,20 @@ class TestBalance:
         )
 
     def test_balance_table_renders(self, live_runner) -> None:
-        """``balance`` (table output) exits 0 and mentions 'Credit balance'."""
+        """``balance`` (bare, table output) exits 0 and mentions 'Credit balance'."""
         result = live_runner.invoke(app, ["balance"])
         assert result.exit_code == 0, result.output
         assert "Credit balance" in result.output
+
+    def test_balance_show_subcommand_returns_numeric_usdc(self, live_runner) -> None:
+        """``balance show --json`` works explicitly."""
+        result = live_runner.invoke(app, ["balance", "show", "--json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert "balance_usdc" in data, f"Missing balance_usdc in: {data}"
+        assert isinstance(data["balance_usdc"], int), (
+            f"balance_usdc must be int, got {type(data['balance_usdc'])}"
+        )
 
 
 class TestUsage:

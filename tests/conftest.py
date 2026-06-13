@@ -118,6 +118,11 @@ def mock_client():
             "total_duration_ms": 1500,
         }
     )
+    from teardrop_cli._fixtures import make_credit_history_entries
+
+    client.get_credit_history = AsyncMock(
+        return_value=make_credit_history_entries(count=3)
+    )
     client.topup_stripe = AsyncMock(
         return_value={
             "session_id": "cs_test_1",
@@ -236,6 +241,11 @@ def mock_client():
     # models benchmarks
     client.get_model_benchmarks = AsyncMock(return_value=make_benchmarks_response())
     client.get_org_model_benchmarks = AsyncMock(return_value=make_benchmarks_response())
+
+    # pricing
+    from teardrop_cli._fixtures import make_pricing_response
+
+    client.get_pricing = AsyncMock(return_value=make_pricing_response())
 
     # siwe wallet sessions
     from teardrop_cli._fixtures import make_siwe_session

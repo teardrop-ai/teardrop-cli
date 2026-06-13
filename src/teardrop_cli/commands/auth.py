@@ -568,3 +568,54 @@ def logout(
 
     config.clear_credentials()
     print_success("Logged out. Credentials cleared from ~/.teardrop/config.toml")
+
+
+# ---------------------------------------------------------------------------
+# invite
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def invite(
+    email: Annotated[str, typer.Argument(help="Email address to invite.")],
+    role: Annotated[
+        str,
+        typer.Option("--role", "-r", help="Org role for the invitee."),
+    ] = "member",
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
+) -> None:
+    """Create an org invite link for a new member.
+
+    Backend strictly enforces ``role="member"`` or ``role="user"``.
+    Inviting with ``role="admin"`` will return a 422 error.
+    """
+    from teardrop_cli import config
+    from teardrop_cli.formatting import print_error, print_success, print_warning, spinner
+
+    if role.lower() in ("admin", "owner"):
+        print_warning(
+            f"Role '{role}' may be rejected by the backend — "
+            "only 'member' and 'user' are supported."
+        )
+
+    client = config.get_client(base_url)
+
+    async def _do():
+        try:
+            return await client.invite(email=email, role=role)
+        finally:
+            await client.close()
+
+    with spinner(f"Inviting {email}…"):
+        try:
+            result = asyncio.run(_do())
+        except Exception as exc:
+            _handle_auth_error(exc)
+            return
+
+    data = result.model_dump() if hasattr(result, "model_dump") else dict(result)
+    link = data.get("invite_url", data.get("link", data.get("url", "")))
+    print_success(f"Invited [bold]{email}[/bold] (role: {role})")
+    if link:
+        from teardrop_cli.formatting import console
+        console.print(f"  Invite link: [bold]{link}[/bold]")

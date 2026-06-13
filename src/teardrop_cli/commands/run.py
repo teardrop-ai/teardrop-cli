@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
+from pathlib import Path
 
 import click
 
@@ -38,6 +39,26 @@ import click
     default=False,
     help="Include UI component generation (emit_ui=True). Adds ~60s but provides structured ui_components in output.",
 )
+@click.option(
+    "--policy-file",
+    "policy_file",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, readable=True),
+    help="Path to a JSON file defining tool execution policy.",
+)
+@click.option(
+    "--exclude",
+    "exclude_names",
+    default=None,
+    multiple=True,
+    help="Exclude a tool by name (may be specified multiple times).",
+)
+@click.option(
+    "--estimate-cost",
+    is_flag=True,
+    default=False,
+    help="Show estimated cost from current pricing/config (no run performed).",
+)
 def app(
     message: str,
     thread: str | None,
@@ -46,6 +67,9 @@ def app(
     as_json: bool,
     base_url: str | None,
     with_ui: bool,
+    policy_file: str | None,
+    exclude_names: tuple[str, ...] | None,
+    estimate_cost: bool,
 ) -> None:
     from teardrop_cli import config
     from teardrop_cli.formatting import console, print_error, print_json
@@ -61,26 +85,54 @@ def app(
             print_error("--context must be a JSON object.")
             raise click.exceptions.Exit(2)
 
+    # --- Resolve tool policy ---
+    tool_policy = None
+    if policy_file:
+        try:
+            raw = _json.loads(Path(policy_file).read_text(encoding="utf-8"))
+        except _json.JSONDecodeError as exc:
+            print_error(f"Invalid JSON in --policy-file: {exc}")
+            raise click.exceptions.Exit(2) from None
+        from teardrop import ToolPolicy
+
+        tool_policy = ToolPolicy(**raw)
+    elif exclude_names:
+        from teardrop import ToolPolicy
+
+        tool_policy = ToolPolicy(exclude_names=list(exclude_names))
+
+    # --- Estimate cost (local, no inference) ---
+    if estimate_cost:
+        _estimate_cost(message, context=context, tool_policy=tool_policy, base_url=base_url)
+        return
+
     client = config.get_client(base_url)
 
     async def _run_command():
         from teardrop_cli.formatting import handle_token_expiry
-        
+
         nonlocal client
         try:
             if as_json or no_stream:
-                return await _collect(client, message, thread, context, emit_ui=with_ui)
+                return await _collect(
+                    client, message, thread, context, emit_ui=with_ui, tool_policy=tool_policy
+                )
             else:
-                await _stream(client, message, thread, context, emit_ui=with_ui)
+                await _stream(
+                    client, message, thread, context, emit_ui=with_ui, tool_policy=tool_policy
+                )
                 return None
         except Exception as exc:
             if await handle_token_expiry(exc, base_url):
-                # Re-fetch client and retry
                 client = config.get_client(base_url)
                 if as_json or no_stream:
-                    return await _collect(client, message, thread, context, emit_ui=with_ui)
+                    return await _collect(
+                        client, message, thread, context, emit_ui=with_ui, tool_policy=tool_policy
+                    )
                 else:
-                    await _stream(client, message, thread, context, emit_ui=with_ui)
+                    await _stream(
+                        client, message, thread, context, emit_ui=with_ui, tool_policy=tool_policy
+                    )
                     return None
             raise
 
@@ -104,30 +156,99 @@ def app(
         raise click.exceptions.Exit(1) from None
 
 
-async def _stream(client, message: str, thread: str | None, context: dict | None, *, emit_ui: bool = False) -> None:
+def _estimate_cost(
+    message: str,
+    *,
+    context: dict | None = None,
+    tool_policy=None,
+    base_url: str | None = None,
+) -> None:
+    """Show an estimated cost based on current pricing and config — no inference."""
+    from teardrop_cli.formatting import console, print_table
+    from teardrop_cli.pricing import estimate_run_cost
+
+    try:
+        est = estimate_run_cost(
+            message, context=context, tool_policy=tool_policy, base_url=base_url
+        )
+    except Exception as exc:  # noqa: BLE001
+        _handle_run_error(exc)
+        return
+
+    from teardrop import format_usdc
+
+    rows = [
+        ["Model", f"{est.model_provider} / {est.model_name}"],
+        ["Input tokens (est.)", str(est.input_tokens_est)],
+        ["Output tokens (est.)", str(est.output_tokens_est)],
+        ["Tool calls (est.)", str(est.tool_calls_est)],
+        [],
+        ["Token input cost", f"${format_usdc(est.model_tokens_in_cost_usdc)} USDC"],
+        ["Token output cost", f"${format_usdc(est.model_tokens_out_cost_usdc)} USDC"],
+        ["Tool call flat cost", f"${format_usdc(est.tool_call_cost_usdc)} USDC"],
+        ["Tool usage cost", f"${format_usdc(est.tool_usage_cost_usdc)} USDC"],
+        ["Base fee", f"${format_usdc(est.base_cost_usdc)} USDC"],
+        [],
+        ["Estimated total", f"[bold]${format_usdc(est.total_usdc)} USDC[/bold]"],
+    ]
+    print_table(
+        [("Item", {"style": "bold cyan"}), "Value"], rows, title="Cost Estimate"
+    )
+    console.print(f"[dim]{est.disclaimer}[/dim]")
+
+
+async def _stream(
+    client,
+    message: str,
+    thread: str | None,
+    context: dict | None,
+    *,
+    emit_ui: bool = False,
+    tool_policy=None,
+) -> None:
     from contextlib import aclosing
 
     from teardrop_cli.formatting import _render_stream
 
     try:
-        events = client.run(message, thread_id=thread, context=context, emit_ui=emit_ui)
+        events = client.run(
+            message,
+            thread_id=thread,
+            context=context,
+            emit_ui=emit_ui,
+            tool_policy=tool_policy,
+        )
         if hasattr(events, "__await__") and not hasattr(events, "__aiter__"):
             events = await events
-        
+
         async with aclosing(events):
             await _render_stream(events)
     finally:
         await client.close()
 
 
-async def _collect(client, message: str, thread: str | None, context: dict | None, *, emit_ui: bool = False) -> str:
+async def _collect(
+    client,
+    message: str,
+    thread: str | None,
+    context: dict | None,
+    *,
+    emit_ui: bool = False,
+    tool_policy=None,
+) -> str:
     from teardrop_cli.formatting import (
         _EV_TEXT,
         _extract_text_and_id,
     )
 
     try:
-        events = client.run(message, thread_id=thread, context=context, emit_ui=emit_ui)
+        events = client.run(
+            message,
+            thread_id=thread,
+            context=context,
+            emit_ui=emit_ui,
+            tool_policy=tool_policy,
+        )
         if hasattr(events, "__await__") and not hasattr(events, "__aiter__"):
             events = await events
 

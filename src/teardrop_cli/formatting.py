@@ -168,6 +168,12 @@ try:  # pragma: no cover - import shape varies across SDK versions
         EVENT_TEXT_MSG_CONTENT as _EV_TEXT,
     )
     from teardrop.streaming import (
+        EVENT_TEXT_MSG_START as _EV_TEXT_START,
+    )
+    from teardrop.streaming import (
+        EVENT_TEXT_MSG_END as _EV_TEXT_END,
+    )
+    from teardrop.streaming import (
         EVENT_TOOL_CALL_DUPLICATE as _EV_TOOL_DUPLICATE,
     )
     from teardrop.streaming import (
@@ -184,6 +190,8 @@ try:  # pragma: no cover - import shape varies across SDK versions
     )
 except ImportError:  # pragma: no cover
     _EV_TEXT = "TEXT_MESSAGE_CONTENT"
+    _EV_TEXT_START = "TEXT_MESSAGE_START"
+    _EV_TEXT_END = "TEXT_MESSAGE_END"
     _EV_TOOL_START = "TOOL_CALL_START"
     _EV_TOOL_DUPLICATE = "TOOL_CALL_DUPLICATE"
     _EV_TOOL_END = "TOOL_CALL_END"
@@ -297,11 +305,42 @@ async def _render_stream(events: AsyncIterator) -> None:  # type: ignore[type-ar
                 console.print(new_content, end="", soft_wrap=True)
                 last_flush_len = len(accumulated_text)
 
+        elif ev_type == _EV_TEXT_START:
+            # Flush accumulated text before a new segment starts.
+            if last_flush_len < len(accumulated_text):
+                console.print(accumulated_text[last_flush_len:], end="", soft_wrap=True)
+                last_flush_len = len(accumulated_text)
+
+        elif ev_type == _EV_TEXT_END:
+            # Flush accumulated text at the end of a segment.
+            if last_flush_len < len(accumulated_text):
+                console.print(accumulated_text[last_flush_len:], end="", soft_wrap=True)
+                last_flush_len = len(accumulated_text)
+
         elif ev_type == _EV_SURFACE:
-            # SURFACE_UPDATE events contain parsed UI components.
-            # CLI currently focuses on narrative prose; UI rendering
-            # is reserved for future implementation.
-            pass
+            # SURFACE_UPDATE events contain parsed UI components. Render
+            # them as structured Markdown blocks so the user can see the
+            # component type and key fields.
+            if isinstance(data, dict):
+                component_type = data.get("type", data.get("component", "unknown"))
+                title = data.get("title", data.get("label", ""))
+                from rich.markdown import Markdown
+                md_lines = [f"**UI — {component_type}**"]
+                if title:
+                    md_lines[0] += f": {title}"
+                # Include key fields but omit large payloads
+                for k, v in data.items():
+                    if k in ("type", "component", "title", "label"):
+                        continue
+                    if isinstance(v, (str, int, float, bool)):
+                        md_lines.append(f"- **{k}:** {v}")
+                    elif isinstance(v, dict):
+                        md_lines.append(f"- **{k}:**")
+                        md_lines.append(f"  ```json")
+                        preview = json.dumps(v, default=str)[:500]
+                        md_lines.append(f"  {preview}")
+                        md_lines.append(f"  ```")
+                console.print(Markdown("\n".join(md_lines)))
 
         elif ev_type == _EV_TOOL_START:
             tool_depth += 1
@@ -368,14 +407,38 @@ async def _render_stream(events: AsyncIterator) -> None:  # type: ignore[type-ar
 
 def _print_usage_summary(data: dict) -> None:
     parts: list[str] = []
-    if "input_tokens" in data:
-        parts.append(f"Input: {data['input_tokens']} tok")
-    if "output_tokens" in data:
-        parts.append(f"Output: {data['output_tokens']} tok")
-    if "total_cost_usd" in data:
-        parts.append(f"Cost: ${data['total_cost_usd']:.4f}")
+
+    run_id = data.get("run_id")
+    if run_id:
+        parts.insert(0, f"Run ID: {run_id}")
+
+    tokens_in = data.get("tokens_in") or data.get("input_tokens", 0)
+    tokens_out = data.get("tokens_out") or data.get("output_tokens", 0)
+    cache_read = data.get("cache_read_tokens", 0)
+    cache_create = data.get("cache_creation_tokens", 0)
+
+    tok_parts = [f"{tokens_in} in"]
+    if cache_read:
+        tok_parts[-1] += f" ({cache_read} cached)"
+    if cache_create:
+        tok_parts.append(f"{cache_create} cache")
+    tok_parts.append(f"{tokens_out} out")
+    parts.append(f"Tokens: {' / '.join(tok_parts)}")
+
+    cost_usdc = data.get("cost_usdc", 0)
+    total_cost = data.get("total_cost_usd", 0)
+    if cost_usdc:
+        from teardrop import format_usdc
+        parts.append(f"Cost: ${format_usdc(int(cost_usdc))}")
+    elif total_cost:
+        parts.append(f"Cost: ${total_cost:.4f}")
+
+    duration = data.get("duration_ms", 0)
+    if duration:
+        parts.append(f"Duration: {duration / 1000:.1f}s")
+
     if parts:
-        console.print(f"[dim]{'  ·  '.join(parts)}[/dim]")
+        console.print(f"[dim]{' | '.join(parts)}[/dim]")
 
 
 def _print_billing_settlement(data: dict) -> None:

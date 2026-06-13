@@ -62,6 +62,7 @@ teardrop run "Summarize the latest ETH gas trends"
 | Generate a new wallet & sign in | `teardrop auth login --siwe --generate-wallet` |
 | Email + password | `teardrop auth login --email you@example.com` |
 | Pre-issued JWT | `teardrop auth login --token <jwt>` |
+| Invite a team member | `teardrop auth invite colleague@example.com` |
 | Show identity | `teardrop auth status` |
 | Sign out | `teardrop auth logout` |
 
@@ -121,6 +122,15 @@ teardrop run "Follow up" --thread <thread-id>
 # Pass structured context
 teardrop run "Process this order" --context '{"order_id":"ord_123"}'
 
+# Exclude specific tools
+teardrop run "Summarize news" --exclude platform/web_search
+
+# Estimate cost based on current pricing & config (no run performed)
+teardrop run "Analyze this data" --estimate-cost
+
+# Apply a tool policy from a file
+teardrop run "Execute workflow" --policy-file policy.json
+
 # Machine-readable output
 teardrop run "..." --json --no-stream
 
@@ -128,15 +138,26 @@ teardrop run "..." --json --no-stream
 teardrop run "..." --json --with-ui
 ```
 
-Streaming output renders Markdown live with inline tool calls. A token + cost summary prints at the end. By default, CLI output is optimized for scripting and automation (`emit_ui=false`); use `--with-ui` only if you need structured UI component data in the JSON output.
+Streaming output renders Markdown live with inline tool calls and structured UI components. A token + cost summary prints at the end. By default, CLI output is optimized for scripting and automation (`emit_ui=false`); use `--with-ui` only if you need structured UI component data in the JSON output.
 
-If a run fails on credit, top up via the dashboard:
+If a run fails on credit, check your balance and history:
 
 ```bash
-teardrop balance   # check credits
+teardrop balance             # current credits
+teardrop balance credit-history   # past charges and top-ups
 ```
 
 To add credits, visit [teardrop.dev](https://teardrop.dev).
+
+---
+
+## Agent Tools
+
+List all tools visible to your agent (platform, marketplace subscriptions, and your own tools):
+
+```bash
+teardrop agent-tools list
+```
 
 ---
 

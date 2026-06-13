@@ -26,6 +26,15 @@ _MARKETPLACE_EXTENSION = {
     "publish_as_mcp": True,
     "marketplace_description": "One-line marketplace pitch (max 200 characters).",
     "base_price_usdc": 1000,  # $0.001 per call (atomic units, 6 decimals)
+    "output_schema": {
+        "type": "object",
+        "properties": {
+            "result": {
+                "type": "string",
+                "description": "Example output field. Replace with your real schema.",
+            }
+        },
+    },
 }
 
 
