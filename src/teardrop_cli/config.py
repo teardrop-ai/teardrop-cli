@@ -28,6 +28,8 @@ _KEYRING_EMAIL_KEY = "email"
 _KEYRING_SECRET_KEY = "secret"
 _KEYRING_CLIENT_ID_KEY = "client_id"
 _KEYRING_CLIENT_SECRET_KEY = "client_secret"
+_KEYRING_SIWE_KEY = "siwe_private_key"
+_KEYRING_SIWE_ADDRESS_KEY = "siwe_address"
 
 DEFAULT_BASE_URL = "https://api.teardrop.dev"
 
@@ -132,6 +134,86 @@ def _keyring_available() -> bool:
         return False
 
 
+def _is_secure_keyring() -> bool:
+    """Check whether the active keyring backend is (likely) encrypted.
+
+    Returns False for plaintext fallback backends that would store a
+    private key in cleartext on disk.  Returns True when the backend
+    cannot be inspected (e.g. macOS/Windows native keychains).
+    """
+    if not _keyring_available():
+        return False
+    import keyring
+
+    def _is_insecure_backend(backend: Any) -> bool:
+        cls = backend.__class__
+        name = cls.__name__.lower()
+        module = cls.__module__.lower()
+        if "plaintext" in name or "uncrypted" in name:
+            return True
+        # keyring "fail" backend cannot store credentials.
+        if module.startswith("keyring.backends.fail"):
+            return True
+        # keyrings.alt backends are fallback-oriented and may be plaintext.
+        if module.startswith("keyrings.alt"):
+            return True
+        return "plaintext" in module or "uncrypted" in module
+
+    try:
+        backend = keyring.get_keyring()
+    except Exception:
+        return False
+
+    if _is_insecure_backend(backend):
+        return False
+
+    # For chained backends, check all layers.
+    return all(
+        not _is_insecure_backend(sub)
+        for sub in getattr(backend, "backends", [])
+    )
+
+
+def store_siwe_key(private_key: str, address: str) -> None:
+    """Persist an Ethereum private key to the OS keyring.
+
+    Refuses to write when the keyring backend is a plaintext fallback.
+    The wallet address is stored alongside the key as a hint for
+    ``get_siwe_key``.
+    """
+    from teardrop_cli.formatting import print_warning
+
+    if not _is_secure_keyring():
+        print_warning(
+            "The active keyring backend is not encrypted. "
+            "SIWE private key was NOT saved."
+        )
+        return
+    import keyring
+
+    try:
+        keyring.set_password(_KEYRING_SERVICE, _KEYRING_SIWE_KEY, private_key)
+        keyring.set_password(_KEYRING_SERVICE, _KEYRING_SIWE_ADDRESS_KEY, address)
+    except Exception as exc:
+        print_warning(f"Failed to save SIWE private key to keyring: {exc}")
+
+
+def get_siwe_key() -> tuple[str, str] | None:
+    """Return ``(private_key, address)`` from keyring, or None."""
+    if not _keyring_available():
+        return None
+    import keyring
+
+    try:
+        pk = keyring.get_password(_KEYRING_SERVICE, _KEYRING_SIWE_KEY)
+        addr = keyring.get_password(_KEYRING_SERVICE, _KEYRING_SIWE_ADDRESS_KEY)
+    except Exception:
+        return None
+    if pk and addr:
+        return pk, addr
+    return None
+
+
 def store_session(
     *,
     access_token: str | None,
@@ -207,6 +289,8 @@ def clear_credentials() -> None:
             _KEYRING_SECRET_KEY,
             _KEYRING_CLIENT_ID_KEY,
             _KEYRING_CLIENT_SECRET_KEY,
+            _KEYRING_SIWE_KEY,
+            _KEYRING_SIWE_ADDRESS_KEY,
         ):
             with contextlib.suppress(Exception):
                 keyring.delete_password(_KEYRING_SERVICE, key)

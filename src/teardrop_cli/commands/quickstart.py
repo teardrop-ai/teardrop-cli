@@ -21,32 +21,37 @@ def app(base_url: str | None) -> None:
 
 
 def _run_quickstart(base_url: str | None) -> None:
-    from teardrop_cli.formatting import console, print_success
+    from teardrop_cli.formatting import console
 
-    console.print(
-        "\n[bold cyan]Welcome to Teardrop.[/bold cyan]  "
-        "[dim]This wizard will get you running in under a minute.[/dim]\n"
-    )
-
-    # 1. Auth — skip if creds already present.
     from teardrop_cli import config
-    if config.has_existing_credentials():
+
+    is_repeat = config.has_existing_credentials()
+
+    if not is_repeat:
+        console.print(
+            "\n[bold cyan]Welcome to Teardrop.[/bold cyan]  "
+            "[dim]This wizard will get you running in under a minute.[/dim]\n"
+        )
+
+    # 1. Auth — use existing creds if present, otherwise guide through auth.
+    if is_repeat:
         console.print("[dim]Existing credentials detected.[/dim]")
         console.print(f"[dim](source: {config.detect_credential_source()})[/dim]")
-        if typer.confirm("Use them?", default=True):
-            print_success("Using existing credentials.")
-        else:
-            _auth_menu(base_url)
+        console.print(
+            "[dim]Stored credentials found locally. "
+            "They will be verified on first authenticated command.[/dim]"
+        )
     else:
         _auth_menu(base_url)
 
     # 2. What's next?
     console.print()
     console.print("[bold]What would you like to do next?[/bold]")
+    console.print("  [cyan]0[/cyan]  Nothing, just exploring [dim](exit)[/dim]")
     console.print("  [cyan]1[/cyan]  Scaffold a tool to publish")
     console.print("  [cyan]2[/cyan]  Run a sample agent prompt")
     console.print("  [cyan]3[/cyan]  Browse marketplace tools")
-    choice = typer.prompt("Choice", default="2", show_default=False)
+    choice = typer.prompt("Choice")
 
     if choice == "1":
         _scaffold_branch()
@@ -79,19 +84,27 @@ def _auth_menu(base_url: str | None) -> None:
 
             url = base_url or config.get_base_url()
             generate = typer.confirm("Generate a new wallet?", default=True)
-            _login_siwe(url, generate_wallet=generate)
+            save_key = typer.confirm(
+                "Save the private key in your OS keyring for future re-authentication?",
+                default=False,
+            )
+            _login_siwe(url, generate_wallet=generate, save_key=save_key)
     else:
         console.print("\n[bold]Sign in:[/bold]")
         console.print("  [cyan]1[/cyan]  Ethereum wallet")
-        console.print("  [cyan]2[/cyan]  Email + password")
-        choice = typer.prompt("Choice", default="2")
+        console.print("  [cyan]2[/cyan]  Email + password [recommended]")
+        choice = typer.prompt("Choice")
 
         if choice == "1":
             from teardrop_cli import config
 
             url = base_url or config.get_base_url()
             generate = typer.confirm("Generate a new wallet?", default=True)
-            _login_siwe(url, generate_wallet=generate)
+            save_key = typer.confirm(
+                "Save the private key in your OS keyring for future re-authentication?",
+                default=False,
+            )
+            _login_siwe(url, generate_wallet=generate, save_key=save_key)
         else:
             login(base_url=base_url)
 

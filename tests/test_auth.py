@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from teardrop_cli.cli import app
@@ -91,20 +92,52 @@ class TestSiweLogin:
         )
         monkeypatch.setenv("TEARDROP_SIWE_PRIVATE_KEY", Account.create().key.hex())
 
-        mock_client = MagicMock()
-        mock_client.get_siwe_nonce = AsyncMock(return_value={"nonce": "abc123"})
-        mock_client.authenticate_siwe = AsyncMock(return_value="jwt.siwe.ok")
-        mock_client.close = AsyncMock()
-
-        with patch("teardrop.AsyncTeardropClient", return_value=mock_client):
+        with patch(
+            "teardrop_cli.commands.auth._siwe_auth_async",
+            return_value="jwt.siwe.ok",
+        ):
             result = runner.invoke(app, ["auth", "login", "--siwe"])
 
         assert result.exit_code == 0, result.output
         assert stored["access_token"] == "jwt.siwe.ok"
-        # authenticate_siwe must be called with exactly (message, signature) — no nonce arg
-        args, kwargs = mock_client.authenticate_siwe.call_args
-        assert len(args) == 2, f"Expected 2 positional args, got {len(args)}"
-        assert not kwargs, f"Expected no kwargs, got {kwargs}"
+
+    @pytest.mark.asyncio
+    async def test_siwe_auth_uses_key_derived_address(self, monkeypatch):
+        from eth_account import Account
+
+        from teardrop_cli.commands.auth import _siwe_auth_async
+
+        private_key = Account.create().key.hex()
+        expected_address = Account.from_key(private_key).address
+        stale_hint = "0x0000000000000000000000000000000000000000"
+        seen: dict[str, str] = {}
+
+        class _FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return None
+
+            async def get_siwe_nonce(self):
+                return {"nonce": "abc123"}
+
+            async def authenticate_siwe(self, message, signature):
+                seen["message"] = message
+                seen["signature"] = signature
+                return "jwt.siwe.ok"
+
+        monkeypatch.setattr("teardrop.AsyncTeardropClient", lambda url: _FakeClient())
+
+        token = await _siwe_auth_async(
+            "https://api.teardrop.dev",
+            private_key,
+            stale_hint,
+        )
+
+        assert token == "jwt.siwe.ok"
+        assert expected_address in seen["message"]
+        assert stale_hint not in seen["message"]
 
     def test_siwe_missing_env_prompts(self, runner: CliRunner, monkeypatch):
         """With no env key and no flags, --siwe falls back to a hidden prompt.

@@ -106,39 +106,68 @@ def app(
         _estimate_cost(message, context=context, tool_policy=tool_policy, base_url=base_url)
         return
 
-    client = config.get_client(base_url)
+    def _run_once():
+        client = config.get_client(base_url)
 
-    async def _run_command():
-        from teardrop_cli.formatting import handle_token_expiry
-
-        nonlocal client
-        try:
-            if as_json or no_stream:
-                return await _collect(
-                    client, message, thread, context, emit_ui=with_ui, tool_policy=tool_policy
-                )
-            else:
-                await _stream(
-                    client, message, thread, context, emit_ui=with_ui, tool_policy=tool_policy
-                )
-                return None
-        except Exception as exc:
-            if await handle_token_expiry(exc, base_url):
-                client = config.get_client(base_url)
+        async def _run_command_once():
+            try:
                 if as_json or no_stream:
                     return await _collect(
-                        client, message, thread, context, emit_ui=with_ui, tool_policy=tool_policy
+                        client,
+                        message,
+                        thread,
+                        context,
+                        emit_ui=with_ui,
+                        tool_policy=tool_policy,
                     )
-                else:
-                    await _stream(
-                        client, message, thread, context, emit_ui=with_ui, tool_policy=tool_policy
-                    )
-                    return None
+                await _stream(
+                    client,
+                    message,
+                    thread,
+                    context,
+                    emit_ui=with_ui,
+                    tool_policy=tool_policy,
+                )
+                return None
+            finally:
+                await client.close()
+
+        return asyncio.run(_run_command_once())
+
+    def _run_with_recovery():
+        from teardrop_cli.formatting import handle_token_expiry
+
+        try:
+            return _run_once()
+        except Exception as exc:
+            action = asyncio.run(
+                handle_token_expiry(
+                    exc,
+                    base_url,
+                    allow_prompt_login=not (as_json or no_stream),
+                )
+            )
+
+            if action == "retry":
+                return _run_once()
+
+            if action == "prompt_login":
+                from teardrop_cli.commands.auth import interactive_reauthenticate
+
+                if not interactive_reauthenticate(base_url=base_url):
+                    raise click.exceptions.Exit(1) from None
+                return _run_once()
+
+            if action == "fail":
+                raise click.exceptions.Exit(1) from None
+
             raise
 
     if as_json or no_stream:
         try:
-            text = asyncio.run(_run_command())
+            text = _run_with_recovery()
+        except click.exceptions.Exit:
+            raise
         except Exception as exc:  # noqa: BLE001
             _handle_run_error(exc)
             raise click.exceptions.Exit(1) from None
@@ -150,7 +179,9 @@ def app(
         return
 
     try:
-        asyncio.run(_run_command())
+        _run_with_recovery()
+    except click.exceptions.Exit:
+        raise
     except Exception as exc:  # noqa: BLE001
         _handle_run_error(exc)
         raise click.exceptions.Exit(1) from None

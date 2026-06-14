@@ -25,24 +25,42 @@ def _list(as_json: bool, base_url: str | None) -> None:
         spinner,
     )
 
-    client = config.get_client(base_url)
-
-    async def _fetch():
+    async def _fetch_once(client):
         try:
             return await client.get_agent_tools()
-        except Exception as exc:
-            if await handle_token_expiry(exc, base_url):
-                new_client = config.get_client(base_url)
-                try:
-                    return await new_client.get_agent_tools()
-                finally:
-                    await new_client.close()
-            raise
         finally:
             await client.close()
 
-    with spinner("Fetching agent tools…"):
-        tools = asyncio.run(_fetch())
+    def _call_once():
+        client = config.get_client(base_url)
+        return asyncio.run(_fetch_once(client))
+
+    try:
+        with spinner("Fetching agent tools…"):
+            tools = _call_once()
+    except Exception as exc:
+        action = asyncio.run(
+            handle_token_expiry(
+                exc,
+                base_url,
+                allow_prompt_login=not as_json,
+            )
+        )
+
+        if action == "retry":
+            with spinner("Fetching agent tools…"):
+                tools = _call_once()
+        elif action == "prompt_login":
+            from teardrop_cli.commands.auth import interactive_reauthenticate
+
+            if not interactive_reauthenticate(base_url=base_url):
+                raise click.exceptions.Exit(1) from None
+            with spinner("Fetching agent tools…"):
+                tools = _call_once()
+        elif action == "fail":
+            raise click.exceptions.Exit(1) from None
+        else:
+            raise
 
     items = [t.model_dump() if hasattr(t, "model_dump") else dict(t) for t in tools]
 

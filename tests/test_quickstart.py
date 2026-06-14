@@ -2,29 +2,52 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from click.testing import CliRunner
 
 from teardrop_cli import config
 from teardrop_cli.cli import app
 
 
+@pytest.fixture(autouse=True)
+def mock_quickstart_auth(monkeypatch):
+    """By default, make get_client return a mock so credential validation passes.
+
+    Only still needed for the sample-run branch path. Tests that set
+    TEARDROP_API_KEY no longer call get_client during quickstart itself.
+    """
+    from teardrop_cli._fixtures import make_jwt_payload
+
+    mock_client = MagicMock()
+    mock_client.get_me = AsyncMock(return_value=make_jwt_payload())
+    mock_client.close = AsyncMock()
+    monkeypatch.setattr(
+        "teardrop_cli.config.get_client",
+        lambda base_url=None, require_auth=True: mock_client,
+    )
+    return mock_client
+
+
 class TestQuickstartCredCheck:
     def test_existing_creds_short_circuit(
         self, runner: CliRunner, monkeypatch
     ):
-        """When TEARDROP_API_KEY is set, wizard offers to use existing creds."""
+        """When TEARDROP_API_KEY is set, quickstart detects local creds."""
         monkeypatch.setenv("TEARDROP_API_KEY", "fake-jwt")
-        # Inputs: confirm "Use them?" → y; choose "Exit" → 4.
-        result = runner.invoke(app, ["quickstart"], input="y\n4\n")
+        # No "Use them?" prompt; just source line and main menu. Pick "0" to exit.
+        result = runner.invoke(app, ["quickstart"], input="0\n")
         assert result.exit_code == 0, result.output
         assert "existing credentials" in result.output.lower()
+        assert "stored credentials found locally" in result.output.lower()
 
     def test_existing_creds_shows_source_label(
         self, runner: CliRunner, monkeypatch
     ):
         """When TEARDROP_API_KEY is set, the source label is displayed."""
         monkeypatch.setenv("TEARDROP_API_KEY", "fake-jwt")
-        result = runner.invoke(app, ["quickstart"], input="y\n4\n")
+        result = runner.invoke(app, ["quickstart"], input="0\n")
         assert result.exit_code == 0, result.output
         assert "(source: env:api_key)" in result.output
 
@@ -43,9 +66,22 @@ class TestQuickstartCredCheck:
         keyring.set_password(config._KEYRING_SERVICE, config._KEYRING_EMAIL_KEY, "user@example.com")
         keyring.set_password(config._KEYRING_SERVICE, config._KEYRING_SECRET_KEY, "hunter2")
 
-        result = runner.invoke(app, ["quickstart"], input="y\n4\n")
+        result = runner.invoke(app, ["quickstart"], input="0\n")
         assert result.exit_code == 0, result.output
         assert "existing credentials" in result.output.lower()
+
+    def test_stale_token_not_validated(self, runner: CliRunner, monkeypatch):
+        """Quickstart does NOT validate token expiry — it trusts stored creds.
+        An expired token surfaces later via the chosen branch's error handler."""
+        monkeypatch.setenv("TEARDROP_API_KEY", "fake-jwt")
+
+        # No need for a failing client — quickstart shouldn't call get_client at all.
+        result = runner.invoke(app, ["quickstart"], input="0\n")
+        assert result.exit_code == 0, result.output
+        # Should see creds message but NO expired/re-authenticating warnings.
+        assert "existing credentials" in result.output.lower()
+        assert "expired" not in result.output.lower()
+        assert "re-authenticating" not in result.output.lower()
 
 
 class TestQuickstartScaffoldBranch:
@@ -55,9 +91,9 @@ class TestQuickstartScaffoldBranch:
         """Branch 1 calls tools.init and prints the publish hint."""
         monkeypatch.setenv("TEARDROP_API_KEY", "fake-jwt")
         monkeypatch.chdir(tmp_path)
-        # use creds → y; choice 1 (scaffold); tool name "demo_tool"
+        # choice 1 (scaffold); tool name "demo_tool"
         result = runner.invoke(
-            app, ["quickstart"], input="y\n1\ndemo_tool\n"
+            app, ["quickstart"], input="1\ndemo_tool\n"
         )
         assert result.exit_code == 0, result.output
         assert (tmp_path / "tool.json").exists()
@@ -70,7 +106,7 @@ class TestQuickstartScaffoldBranch:
         monkeypatch.chdir(tmp_path)
         # Invalid name "BadName" — tools_init raises typer.Exit(1)
         result = runner.invoke(
-            app, ["quickstart"], input="y\n1\nBadName\n"
+            app, ["quickstart"], input="1\nBadName\n"
         )
         assert result.exit_code != 0
         assert not (tmp_path / "tool.json").exists()
@@ -91,9 +127,9 @@ class TestQuickstartSampleRunBranch:
         from teardrop_cli.commands import run as run_mod
         monkeypatch.setattr(run_mod, "_stream", _fake_stream)
 
-        # use creds → y; choice 2 (run); prompt text; skip BYOK → n
+        # choice 2 (run); prompt text; skip BYOK → n
         result = runner.invoke(
-            app, ["quickstart"], input="y\n2\nhello there\nn\n"
+            app, ["quickstart"], input="2\nhello there\nn\n"
         )
         assert result.exit_code == 0, result.output
         assert "message" in run_called
@@ -113,11 +149,12 @@ class TestQuickstartSampleRunBranch:
         monkeypatch.setattr(run_mod, "_stream", _failing_stream)
 
         result = runner.invoke(
-            app, ["quickstart"], input="y\n2\nping\nn\n"
+            app, ["quickstart"], input="2\nping\nn\n"
         )
         # _handle_run_error prints the error but doesn't raise; wizard finishes cleanly
         assert result.exit_code == 0, result.output
-        assert "exploring" not in result.output.lower()
+        # "continue exploring" is the next-steps text that should be suppressed
+        assert "continue exploring" not in result.output.lower()
 
 
 class TestQuickstartMarketplaceBranch:
@@ -135,8 +172,8 @@ class TestQuickstartMarketplaceBranch:
         from teardrop_cli.commands import marketplace as marketplace_mod
         monkeypatch.setattr(marketplace_mod, "list_cmd", _fake_list_cmd)
 
-        # use creds → y; choice 3 (marketplace)
-        result = runner.invoke(app, ["quickstart"], input="y\n3\n")
+        # choice 3 (marketplace)
+        result = runner.invoke(app, ["quickstart"], input="3\n")
         assert result.exit_code == 0, result.output
         assert "called" in listed
         assert "subscribe" in result.output.lower()
@@ -180,8 +217,8 @@ class TestQuickstartAuthMenu:
         ):
             monkeypatch.delenv(var, raising=False)
 
-        # has account (y); choose email login (2 = default); exit (4)
-        result = runner.invoke(app, ["quickstart"], input="y\n\n4\n")
+        # has account (y); choose email login (2, no longer the default); exit (4)
+        result = runner.invoke(app, ["quickstart"], input="y\n2\n4\n")
         assert result.exit_code == 0, result.output
         assert "kwargs" in called
 

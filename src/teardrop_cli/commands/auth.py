@@ -212,6 +212,13 @@ def login(
             help="(SIWE) Generate a new wallet, print it once, and sign in with it.",
         ),
     ] = False,
+    save_key: Annotated[
+        bool,
+        typer.Option(
+            "--save-key",
+            help="(SIWE) Save the private key in your OS keyring so future sessions can auto-re-authenticate.",
+        ),
+    ] = False,
     base_url: Annotated[
         str | None,
         typer.Option("--base-url", help="Override the API base URL.", hidden=True),
@@ -234,7 +241,7 @@ def login(
 
     # SIWE
     if siwe or generate_wallet or key_file is not None:
-        _login_siwe(url, key_file=key_file, generate_wallet=generate_wallet)
+        _login_siwe(url, key_file=key_file, generate_wallet=generate_wallet, save_key=save_key)
         return
 
     # Client credentials (M2M)
@@ -310,6 +317,40 @@ def login(
     print_success(f"Logged in as [bold]{email}[/bold]{org_label}")
 
 
+def interactive_reauthenticate(base_url: str | None = None) -> bool:
+    """Prompt the user to sign in again after an expired session.
+
+    Returns ``True`` when authentication completed and the caller should retry,
+    or ``False`` when the user cancels.
+    """
+    from teardrop_cli import config
+    from teardrop_cli.formatting import console, print_warning
+
+    print_warning("Your session expired during this command.")
+    console.print("\n[bold]Sign in to continue:[/bold]")
+    console.print("  [cyan]0[/cyan]  Cancel")
+    console.print("  [cyan]1[/cyan]  Email + password [recommended]")
+    console.print("  [cyan]2[/cyan]  Ethereum wallet")
+
+    choice = typer.prompt("Choice")
+    if choice in {"0", "q", "Q", "quit", "cancel"}:
+        print_warning("Cancelled. Command aborted.")
+        return False
+
+    if choice == "2":
+        url = base_url or config.get_base_url()
+        generate = typer.confirm("Generate a new wallet?", default=False)
+        save_key = typer.confirm(
+            "Save the private key in your OS keyring for future re-authentication?",
+            default=False,
+        )
+        _login_siwe(url, generate_wallet=generate, save_key=save_key)
+        return True
+
+    login(base_url=base_url)
+    return True
+
+
 # ---------------------------------------------------------------------------
 # SIWE — wallet sign-in (interactive prompt, --key-file, or --generate-wallet)
 # ---------------------------------------------------------------------------
@@ -377,17 +418,21 @@ def _resolve_siwe_private_key(
     raise typer.Exit(1)
 
 
-def _login_siwe(
+async def _siwe_auth_async(
     url: str,
-    *,
-    key_file: Path | None = None,
-    generate_wallet: bool = False,
-) -> None:
-    """SIWE login. First-time signers are auto-registered by the backend."""
-    from teardrop import AsyncTeardropClient
+    private_key: str,
+    wallet_address: str,
+) -> str:
+    """Perform the SIWE nonce+sign+authenticate round trip asynchronously.
 
-    from teardrop_cli import config
-    from teardrop_cli.formatting import console, print_success, spinner
+    Returns the JWT access token.  Caller is responsible for persisting
+    it (via ``config.store_session``) and for scrubbing *private_key*.
+
+    This is the inner async helper used by both the sync CLI command
+    (``_login_siwe``) and the async token-expiry recovery path
+    (``handle_token_expiry``).
+    """
+    from teardrop import AsyncTeardropClient
 
     try:
         from eth_account import Account
@@ -401,9 +446,77 @@ def _login_siwe(
         )
         raise typer.Exit(1) from None
 
-    private_key, _ = _resolve_siwe_private_key(
-        key_file=key_file, generate_wallet=generate_wallet
-    )
+    account = Account.from_key(private_key)
+    # Always trust the key-derived address over any persisted metadata hint.
+    wallet_address = account.address
+
+    async with AsyncTeardropClient(url) as client:
+        nonce_resp = await client.get_siwe_nonce()
+        nonce = nonce_resp.get("nonce", nonce_resp.get("value", ""))
+
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        domain = parsed.netloc or parsed.path
+        issued_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        message = (
+            f"{domain} wants you to sign in with your Ethereum account:\n"
+            f"{wallet_address}\n\n"
+            f"Sign in to Teardrop\n\n"
+            f"URI: {url}\n"
+            f"Version: 1\n"
+            f"Chain ID: 1\n"
+            f"Nonce: {nonce}\n"
+            f"Issued At: {issued_at}"
+        )
+
+        signable = encode_defunct(text=message)
+        signed = account.sign_message(signable)
+        signature = signed.signature.hex()
+        if not signature.startswith("0x"):
+            signature = "0x" + signature
+
+        return await client.authenticate_siwe(message, signature)
+
+
+def _login_siwe(
+    url: str,
+    *,
+    key_file: Path | None = None,
+    generate_wallet: bool = False,
+    save_key: bool = False,
+    private_key: str | None = None,
+) -> None:
+    """SIWE login. First-time signers are auto-registered by the backend.
+
+    When *save_key* is True the SIWE private key is persisted to the OS
+    keyring so subsequent CLI sessions can re-authenticate without manual
+    intervention.  A warning is printed if the keyring backend is not
+    encrypted; the key is NOT saved in that case.
+
+    When *private_key* is provided (e.g. by ``handle_token_expiry``) it is
+    used directly, bypassing ``_resolve_siwe_private_key``.
+    """
+    from teardrop_cli import config
+    from teardrop_cli.formatting import console, print_success, spinner
+
+    try:
+        from eth_account import Account
+    except ImportError:
+        from teardrop_cli.formatting import print_error
+
+        print_error(
+            "eth-account is required for SIWE login.",
+            hint="Install it with: pip install eth-account",
+        )
+        raise typer.Exit(1) from None
+
+    if private_key is not None:
+        is_generated = False
+    else:
+        private_key, is_generated = _resolve_siwe_private_key(
+            key_file=key_file, generate_wallet=generate_wallet
+        )
 
     try:
         account = Account.from_key(private_key)
@@ -417,41 +530,15 @@ def _login_siwe(
     wallet_address = account.address
     console.print(f"[dim]Wallet:[/dim] {wallet_address}")
 
-    async def _do_siwe() -> str:
-        client = AsyncTeardropClient(url)
-        try:
-            nonce_resp = await client.get_siwe_nonce()
-            nonce = nonce_resp.get("nonce", nonce_resp.get("value", ""))
-
-            from urllib.parse import urlparse
-
-            parsed = urlparse(url)
-            domain = parsed.netloc or parsed.path
-            issued_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-            message = (
-                f"{domain} wants you to sign in with your Ethereum account:\n"
-                f"{wallet_address}\n\n"
-                f"Sign in to Teardrop\n\n"
-                f"URI: {url}\n"
-                f"Version: 1\n"
-                f"Chain ID: 1\n"
-                f"Nonce: {nonce}\n"
-                f"Issued At: {issued_at}"
-            )
-
-            signable = encode_defunct(text=message)
-            signed = account.sign_message(signable)
-            signature = signed.signature.hex()
-            if not signature.startswith("0x"):
-                signature = "0x" + signature
-
-            return await client.authenticate_siwe(message, signature)
-        finally:
-            await client.close()
+    # Keep a copy before the try block so the finally del doesn't
+    # affect the save_key branch below.
+    _pk_copy = private_key
 
     try:
         with spinner("Signing in with Ethereum…"):
-            jwt_token = asyncio.run(_do_siwe())
+            jwt_token = asyncio.run(
+                _siwe_auth_async(url, private_key, wallet_address)
+            )
     except Exception as exc:
         _handle_auth_error(exc)
         return
@@ -461,6 +548,14 @@ def _login_siwe(
         del private_key
 
     config.store_session(access_token=jwt_token)
+
+    if save_key:
+        config.store_siwe_key(_pk_copy, wallet_address)
+
+    # Scrub the copy now that we're done with it.
+    _pk_copy = "0" * len(_pk_copy)  # noqa: F841
+    del _pk_copy
+
     print_success(f"Authenticated via SIWE as [bold]{wallet_address}[/bold].")
 
 
@@ -590,7 +685,7 @@ def invite(
     Inviting with ``role="admin"`` will return a 422 error.
     """
     from teardrop_cli import config
-    from teardrop_cli.formatting import print_error, print_success, print_warning, spinner
+    from teardrop_cli.formatting import print_success, print_warning, spinner
 
     if role.lower() in ("admin", "owner"):
         print_warning(

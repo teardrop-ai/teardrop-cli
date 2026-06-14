@@ -58,15 +58,19 @@ teardrop run "Summarize the latest ETH gas trends"
 | Goal | Command |
 |------|---------|
 | Create account & org | `teardrop auth signup` |
-| Sign in with wallet (existing key) | `teardrop auth login --siwe --key-file wallet.key` |
-| Generate a new wallet & sign in | `teardrop auth login --siwe --generate-wallet` |
+| Generate a new wallet & sign in | `teardrop auth login --siwe --generate-wallet [--save-key]` |
+| Sign in with wallet (existing key) | `teardrop auth login --siwe --key-file wallet.key [--save-key]` |
 | Email + password | `teardrop auth login --email you@example.com` |
 | Pre-issued JWT | `teardrop auth login --token <jwt>` |
 | Invite a team member | `teardrop auth invite colleague@example.com` |
 | Show identity | `teardrop auth status` |
 | Sign out | `teardrop auth logout` |
 
-Private keys are never persisted by the CLI. Sessions are stored in your OS keyring.
+Private keys are never persisted by the CLI unless you pass ``--save-key``.
+When saved, the key is stored in your OS keyring (never in a config file)
+and can be used for automatic re-authentication when the session token
+expires.  An encrypted keyring backend is required — plaintext fallbacks
+are refused.
 
 For machine-to-machine credentials, env-var precedence, and CI patterns, see [docs/cli-reference.md](docs/cli-reference.md#authentication).
 

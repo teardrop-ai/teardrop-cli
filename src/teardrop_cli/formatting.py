@@ -11,7 +11,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from rich.console import Console
 from rich.table import Table
@@ -51,41 +51,90 @@ def print_warning(message: str) -> None:
     console.print(f"[bold yellow]⚠[/bold yellow]  {message}")
 
 
-async def handle_token_expiry(exc: Exception, base_url: str | None = None) -> bool:
+TokenExpiryAction = Literal["none", "retry", "prompt_login", "fail"]
+
+
+async def handle_token_expiry(
+    exc: Exception,
+    base_url: str | None = None,
+    *,
+    allow_prompt_login: bool = False,
+) -> TokenExpiryAction:
     """Handle AuthenticationError by checking for fallback credentials.
 
-    If fallback credentials (email+secret) exist, they will have higher priority
-    in the next ``config.get_client()`` call thanks to the priority reordering.
-    This helper returns True if the caller should retry the command, or
-    False/raises SystemExit if no recovery is possible.
+    Checks, in order:
+
+    1. Refresh-capable credential sources (email/client creds).
+    2. SIWE private key in keyring (silent re-auth via ``_siwe_auth_async``)
+       when the active source is config-token based.
+    3. Optional caller-controlled interactive login prompt (for human-driven
+       commands only; disabled for machine-readable ``--json`` paths).
+
+    Returns one of:
+      - ``"retry"`` when the caller should retry the command.
+      - ``"prompt_login"`` when the caller may run an interactive login flow.
+      - ``"fail"`` when the command should exit after this helper printed
+        a user-facing auth error.
+      - ``"none"`` when the error is unrelated to token expiry.
     """
     from teardrop import AuthenticationError
 
     if not isinstance(exc, AuthenticationError):
-        return False
+        return "none"
 
     # Check if the error is specifically about expiration
     msg = str(exc).lower()
-    if "expired" not in msg and "token" not in msg:
-        return False
+    if "expire" not in msg:
+        return "none"
 
     from teardrop_cli import config
 
-    # If we have email credentials in the keyring, reordering guarantees
-    # they will be used on the next get_client() call.
-    if config.has_existing_credentials():
-        # verify it's not JUST a static token
-        cfg = config.load_config()
-        has_email = bool(cfg.get("email"))
-        if has_email:
-            print_warning("Session expired. Attempting auto-refresh...")
-            return True
+    source = config.detect_credential_source()
+
+    # 1. Refresh-capable sources can recover on the next client creation.
+    if source in {"env:email", "env:client", "keyring:email", "keyring:client"}:
+        print_warning("Session expired. Attempting auto-refresh...")
+        return "retry"
+
+    # 2. SIWE private key in keyring — silent re-auth.
+    # Only attempt this when config-file token auth is active. If an env token
+    # is active, retry would still pick env first and SIWE refresh would be moot.
+    if source in {"config:token", "config:legacy_token", None}:
+        siwe_key = config.get_siwe_key()
+        if siwe_key is not None:
+            private_key, address = siwe_key
+            from teardrop_cli.commands.auth import _siwe_auth_async
+
+            print_warning("Session expired. Re-authenticating via SIWE...")
+            url = base_url or config.get_base_url()
+            try:
+                jwt_token = await _siwe_auth_async(url, private_key, address)
+            except Exception:
+                print_warning("Automatic SIWE re-authentication failed.")
+            else:
+                config.store_session(access_token=jwt_token)
+                # Scrub the key string now that we're done with it.
+                private_key = "0" * len(private_key)  # noqa: F841
+                del private_key
+                print_warning("Re-authenticated via SIWE. Retrying command...")
+                return "retry"
+
+    if allow_prompt_login and source in {"config:token", "config:legacy_token", None}:
+        print_warning("Stored session has expired. Please sign in to continue.")
+        return "prompt_login"
+
+    hint = "Run [bold]teardrop auth login[/bold] to sign in again."
+    if source == "env:api_key":
+        hint = (
+            "TEARDROP_API_KEY/TEARDROP_TOKEN appears expired. "
+            "Update or unset it, then run [bold]teardrop auth login[/bold]."
+        )
 
     print_error(
         "Your session has expired.",
-        hint="Run [bold]teardrop auth login[/bold] to sign in again.",
+        hint=hint,
     )
-    raise SystemExit(1)
+    return "fail"
 
 
 # ---------------------------------------------------------------------------
@@ -168,10 +217,10 @@ try:  # pragma: no cover - import shape varies across SDK versions
         EVENT_TEXT_MSG_CONTENT as _EV_TEXT,
     )
     from teardrop.streaming import (
-        EVENT_TEXT_MSG_START as _EV_TEXT_START,
+        EVENT_TEXT_MSG_END as _EV_TEXT_END,
     )
     from teardrop.streaming import (
-        EVENT_TEXT_MSG_END as _EV_TEXT_END,
+        EVENT_TEXT_MSG_START as _EV_TEXT_START,
     )
     from teardrop.streaming import (
         EVENT_TOOL_CALL_DUPLICATE as _EV_TOOL_DUPLICATE,
@@ -336,10 +385,10 @@ async def _render_stream(events: AsyncIterator) -> None:  # type: ignore[type-ar
                         md_lines.append(f"- **{k}:** {v}")
                     elif isinstance(v, dict):
                         md_lines.append(f"- **{k}:**")
-                        md_lines.append(f"  ```json")
+                        md_lines.append("  ```json")
                         preview = json.dumps(v, default=str)[:500]
                         md_lines.append(f"  {preview}")
-                        md_lines.append(f"  ```")
+                        md_lines.append("  ```")
                 console.print(Markdown("\n".join(md_lines)))
 
         elif ev_type == _EV_TOOL_START:

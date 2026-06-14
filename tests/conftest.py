@@ -65,6 +65,7 @@ def mock_keyring(request, monkeypatch: pytest.MonkeyPatch):
         store.pop((service, key), None)
 
     monkeypatch.setattr("teardrop_cli.config._keyring_available", lambda: True)
+    monkeypatch.setattr("teardrop_cli.config._is_secure_keyring", lambda: True)
     with (
         patch("keyring.get_password", side_effect=_get),
         patch("keyring.set_password", side_effect=_set),

@@ -44,24 +44,42 @@ def balance(
         spinner,
     )
 
-    client = config.get_client(base_url)
-
-    async def _fetch():
+    async def _fetch_once(client):
         try:
             return await client.get_marketplace_balance()
-        except Exception as exc:
-            if await handle_token_expiry(exc, base_url):
-                new_client = config.get_client(base_url)
-                try:
-                    return await new_client.get_marketplace_balance()
-                finally:
-                    await new_client.close()
-            raise
         finally:
             await client.close()
 
-    with spinner("Fetching balance…"):
-        data = asyncio.run(_fetch())
+    def _call_once():
+        client = config.get_client(base_url)
+        return asyncio.run(_fetch_once(client))
+
+    try:
+        with spinner("Fetching balance…"):
+            data = _call_once()
+    except Exception as exc:
+        action = asyncio.run(
+            handle_token_expiry(
+                exc,
+                base_url,
+                allow_prompt_login=not as_json,
+            )
+        )
+
+        if action == "retry":
+            with spinner("Fetching balance…"):
+                data = _call_once()
+        elif action == "prompt_login":
+            from teardrop_cli.commands.auth import interactive_reauthenticate
+
+            if not interactive_reauthenticate(base_url=base_url):
+                raise typer.Exit(1)
+            with spinner("Fetching balance…"):
+                data = _call_once()
+        elif action == "fail":
+            raise typer.Exit(1)
+        else:
+            raise
 
     if hasattr(data, "model_dump"):
         data = data.model_dump()
