@@ -21,9 +21,8 @@ def app(base_url: str | None) -> None:
 
 
 def _run_quickstart(base_url: str | None) -> None:
-    from teardrop_cli.formatting import console
-
     from teardrop_cli import config
+    from teardrop_cli.formatting import console
 
     is_repeat = config.has_existing_credentials()
 

@@ -73,11 +73,11 @@ def balance(
             from teardrop_cli.commands.auth import interactive_reauthenticate
 
             if not interactive_reauthenticate(base_url=base_url):
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
             with spinner("Fetching balance…"):
                 data = _call_once()
         elif action == "fail":
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
         else:
             raise
 
