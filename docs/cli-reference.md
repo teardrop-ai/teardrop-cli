@@ -8,6 +8,7 @@ This document covers every flag, env var, and subcommand. For the quick path, st
 
 - [Authentication](#authentication)
 - [Running Agents](#running-agents)
+- [Chat Sessions](#chat-sessions)
 - [Billing & Credits](#billing--credits)
 - [Tool Management](#tool-management)
 - [Marketplace](#marketplace)
@@ -87,6 +88,34 @@ teardrop run "..." --json
 Streaming output renders Markdown live with inline tool calls. A token + cost summary prints at the end.
 
 `--json` output schema is documented in [docs/cli-json-schema.md](./cli-json-schema.md).
+
+---
+
+## Chat Sessions
+
+```bash
+teardrop chat "What is the current ETH gas price?"   # auto-creates a thread
+teardrop chat "Follow up on that"                     # continues the same thread
+teardrop chat "Start fresh" --new                     # starts a new conversation
+teardrop chat "Specific thread" --thread thr_abc123   # explicit thread by id
+teardrop chat "..." --json                            # machine-readable output
+```
+
+The active thread id is stored in `~/.teardrop/config.toml` (`chat.active_thread_id`).
+The file is chmod'd 600 and the thread id is printed to stderr after every turn.
+
+**Flag precedence** (highest first):
+1. `--new` — clears the stored thread; a fresh one is created server-side.
+2. `--thread <id>` — overrides any stored thread.
+3. **Stored thread** — read from config if neither `--new` nor `--thread` is given.
+4. **Server‑minted** — if none of the above resolve to a value, the server assigns one and it is persisted automatically.
+
+Chat supports all the same options as `run` (`--context`, `--exclude`, `--policy-file`,
+`--estimate-cost`, `--with-ui`, `--no-stream`, `--base-url`).
+
+**Logout clears state**: `teardrop auth logout` removes both credentials **and**
+the active thread id from the config file. The next `teardrop chat` after logout
+will start a fresh thread.
 
 ---
 

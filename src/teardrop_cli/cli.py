@@ -18,6 +18,7 @@ from teardrop_cli._lazy import LazyGroup
     cls=LazyGroup,
     lazy_subcommands={
         "auth": "teardrop_cli.commands.auth:app",
+        "chat": "teardrop_cli.commands.chat:app",
         "init": "teardrop_cli.commands.config_cmd:init_app",
         "quickstart": "teardrop_cli.commands.quickstart:app",
         "config": "teardrop_cli.commands.config_cmd:app",

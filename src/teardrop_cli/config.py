@@ -279,6 +279,33 @@ def get_refresh_token() -> str | None:
     return load_config().get("refresh_token")
 
 
+def get_active_thread_id() -> str | None:
+    """Return the active chat thread id from config, or None."""
+    cfg = load_config()
+    chat_cfg = cfg.get("chat")
+    if isinstance(chat_cfg, dict):
+        tid = chat_cfg.get("active_thread_id")
+        if isinstance(tid, str) and tid.strip():
+            return tid.strip()
+    return None
+
+
+def set_active_thread_id(tid: str | None) -> None:
+    """Persist the active chat thread id to config."""
+    cfg = load_config()
+    chat_cfg = cfg.setdefault("chat", {})
+    if tid is not None:
+        chat_cfg["active_thread_id"] = tid
+    else:
+        chat_cfg.pop("active_thread_id", None)
+    save_config(cfg)
+
+
+def clear_active_thread_id() -> None:
+    """Remove the active chat thread id from config."""
+    set_active_thread_id(None)
+
+
 def clear_credentials() -> None:
     """Remove all stored credentials from keyring and config file."""
     if _keyring_available():
@@ -299,6 +326,7 @@ def clear_credentials() -> None:
     for key in ("access_token", "refresh_token", "email", "org_id", "client_id"):
         cfg.pop(key, None)
     cfg.pop("auth", None)  # legacy
+    cfg.pop("chat", None)  # chat session state (active thread, etc.)
     save_config(cfg)
 
 

@@ -317,13 +317,20 @@ def stream_agent_response(events: AsyncIterator) -> None:  # type: ignore[type-a
     asyncio.run(_render_stream(events))
 
 
-async def _render_stream(events: AsyncIterator) -> None:  # type: ignore[type-arg]
+async def _render_stream(
+    events: AsyncIterator,  # type: ignore[type-arg]
+    *,
+    on_thread_id: Any = None,
+) -> None:  # type: ignore[type-arg]
     """Async implementation of the streaming renderer.
     
     Streams response text and tool calls directly to scrollback (no in-place
     updates) to ensure:
     1. Full scrollback visibility during streaming
     2. No duplicate content on terminal resize
+
+    *on_thread_id* — optional callable ``callable(tid: str)`` invoked when
+    a thread_id is detected in an SSE event payload.
     """
     accumulated_text = ""
     current_message_id = None
@@ -334,6 +341,12 @@ async def _render_stream(events: AsyncIterator) -> None:  # type: ignore[type-ar
     async for event in events:
         ev_type: str = getattr(event, "type", "") or ""
         data = getattr(event, "data", None)
+
+        # Capture thread_id from any SSE event payload (forward-compatible)
+        if on_thread_id is not None and isinstance(data, dict):
+            tid = data.get("thread_id") or data.get("thread") or data.get("id")
+            if isinstance(tid, str) and tid.strip():
+                on_thread_id(tid.strip())
 
         if ev_type == _EV_TEXT:
             chunk, message_id = _extract_text_and_id(data)
@@ -413,6 +426,8 @@ async def _render_stream(events: AsyncIterator) -> None:  # type: ignore[type-ar
 
         elif ev_type == _EV_TOOL_END:
             tool_depth = max(0, tool_depth - 1)
+            if tool_depth == 0:
+                console.print()  # Blank line between tool calls and prose
 
         elif ev_type == _EV_USAGE:
             # Flush any remaining text before usage summary
@@ -449,9 +464,6 @@ async def _render_stream(events: AsyncIterator) -> None:  # type: ignore[type-ar
     # Flush any remaining accumulated text (only if we didn't see DONE/USAGE)
     if last_flush_len < len(accumulated_text):
         console.print(accumulated_text[last_flush_len:], soft_wrap=True)
-
-    # Ensure a newline after streaming output
-    console.print()
 
 
 def _print_usage_summary(data: dict) -> None:

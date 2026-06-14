@@ -144,6 +144,26 @@ teardrop run "..." --json --with-ui
 
 Streaming output renders Markdown live with inline tool calls and structured UI components. A token + cost summary prints at the end. By default, CLI output is optimized for scripting and automation (`emit_ui=false`); use `--with-ui` only if you need structured UI component data in the JSON output.
 
+---
+
+## Chat with an Agent
+
+A stateful chat mode that automatically continues the same thread across invocations:
+
+```bash
+teardrop chat "What is the current ETH gas price?"   # auto-creates a thread
+teardrop chat "Follow up on that"                     # continues the same thread
+teardrop chat "Start fresh" --new                     # starts a new conversation
+teardrop chat "Specific thread" --thread thr_abc123   # explicit thread by id
+teardrop chat "..." --json                            # machine-readable output
+```
+
+The active thread id is stored in `~/.teardrop/config.toml` and reused on your next `teardrop chat` call. The thread id is printed after every turn for copy/paste. All run flags (`--context`, `--exclude`, `--policy-file`, `--estimate-cost`, `--with-ui`, `--no-stream`) are supported.
+
+Use `teardrop run` for one-shot, script-friendly calls — use `teardrop chat` for conversational interaction.
+
+---
+
 If a run fails on credit, check your balance and history:
 
 ```bash

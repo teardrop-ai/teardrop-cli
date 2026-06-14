@@ -71,7 +71,6 @@ def app(
     exclude_names: tuple[str, ...] | None,
     estimate_cost: bool,
 ) -> None:
-    from teardrop_cli import config
     from teardrop_cli.formatting import console, print_error, print_json
 
     context: dict | None = None
@@ -106,6 +105,45 @@ def app(
         _estimate_cost(message, context=context, tool_policy=tool_policy, base_url=base_url)
         return
 
+    text = _execute_run(
+        message,
+        thread=thread,
+        context=context,
+        no_stream=no_stream,
+        as_json=as_json,
+        base_url=base_url,
+        with_ui=with_ui,
+        tool_policy=tool_policy,
+    )
+
+    if text is not None:
+        if as_json:
+            print_json({"text": text, "thread_id": thread})
+        else:
+            console.print(text)
+
+
+def _execute_run(
+    message: str,
+    *,
+    thread: str | None = None,
+    context: dict | None = None,
+    no_stream: bool = False,
+    as_json: bool = False,
+    base_url: str | None = None,
+    with_ui: bool = False,
+    tool_policy=None,
+    on_thread_id=None,
+) -> str | None:
+    """Execute an agent run with optional recovery from token expiry.
+
+    Returns collected text when *no_stream* or *as_json* is True,
+    None otherwise (streaming case).  The *on_thread_id* callback
+    is invoked with the thread id if the server returns one.
+    """
+    from teardrop_cli import config
+    from teardrop_cli.formatting import handle_token_expiry
+
     def _run_once():
         client = config.get_client(base_url)
 
@@ -119,6 +157,7 @@ def app(
                         context,
                         emit_ui=with_ui,
                         tool_policy=tool_policy,
+                        on_thread_id=on_thread_id,
                     )
                 await _stream(
                     client,
@@ -127,6 +166,7 @@ def app(
                     context,
                     emit_ui=with_ui,
                     tool_policy=tool_policy,
+                    on_thread_id=on_thread_id,
                 )
                 return None
             finally:
@@ -135,8 +175,6 @@ def app(
         return asyncio.run(_run_command_once())
 
     def _run_with_recovery():
-        from teardrop_cli.formatting import handle_token_expiry
-
         try:
             return _run_once()
         except Exception as exc:
@@ -163,23 +201,8 @@ def app(
 
             raise
 
-    if as_json or no_stream:
-        try:
-            text = _run_with_recovery()
-        except click.exceptions.Exit:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            _handle_run_error(exc)
-            raise click.exceptions.Exit(1) from None
-
-        if as_json:
-            print_json({"text": text, "thread_id": thread})
-        else:
-            console.print(text)
-        return
-
     try:
-        _run_with_recovery()
+        return _run_with_recovery()
     except click.exceptions.Exit:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -236,6 +259,7 @@ async def _stream(
     *,
     emit_ui: bool = False,
     tool_policy=None,
+    on_thread_id=None,
 ) -> None:
     from contextlib import aclosing
 
@@ -253,7 +277,7 @@ async def _stream(
             events = await events
 
         async with aclosing(events):
-            await _render_stream(events)
+            await _render_stream(events, on_thread_id=on_thread_id)
     finally:
         await client.close()
 
@@ -266,6 +290,7 @@ async def _collect(
     *,
     emit_ui: bool = False,
     tool_policy=None,
+    on_thread_id=None,
 ) -> str:
     from teardrop_cli.formatting import (
         _EV_TEXT,
@@ -289,6 +314,13 @@ async def _collect(
             async for event in events:
                 if getattr(event, "type", "") == _EV_TEXT:
                     data = getattr(event, "data", None)
+
+                    # Capture thread_id if the server returns one
+                    if on_thread_id is not None and isinstance(data, dict):
+                        tid = data.get("thread_id") or data.get("thread") or data.get("id")
+                        if isinstance(tid, str) and tid.strip():
+                            on_thread_id(tid.strip())
+
                     chunk, message_id = _extract_text_and_id(data)
 
                     # For --no-stream, only keep the last message's text
