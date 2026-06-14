@@ -7,7 +7,8 @@ Credential resolution order (highest priority first):
   2. ``TEARDROP_EMAIL`` + ``TEARDROP_SECRET`` env vars — auto-refresh via TokenManager
   3. ``TEARDROP_CLIENT_ID`` + ``TEARDROP_CLIENT_SECRET`` env vars — M2M
   4. Stored email + secret (keyring) or client credentials (keyring)
-  5. Stored access_token in config file (with optional refresh_token)
+  5. Stored ``access_token`` in config file
+  6. Legacy ``auth.token`` in config file (nested)
 """
 
 from __future__ import annotations
@@ -254,6 +255,48 @@ def has_existing_credentials() -> bool:
     # Config file
     cfg = load_config()
     return bool(cfg.get("access_token") or cfg.get("auth", {}).get("token"))
+
+
+def detect_credential_source() -> str | None:
+    """Return a label describing which credential source is available, or None.
+
+    Follows the same precedence order as :func:`has_existing_credentials`.
+    Returns one of:
+      ``"env:api_key"``, ``"env:email"``, ``"env:client"``,
+      ``"keyring:email"``, ``"keyring:client"``,
+      ``"config:token"``, ``"config:legacy_token"``, or ``None``.
+
+    The return value is a *label only* — never a secret or credential value.
+    """
+    # Env vars (priorities 1-3)
+    if os.environ.get("TEARDROP_API_KEY") or os.environ.get("TEARDROP_TOKEN"):
+        return "env:api_key"
+    if os.environ.get("TEARDROP_EMAIL") and os.environ.get("TEARDROP_SECRET"):
+        return "env:email"
+    if os.environ.get("TEARDROP_CLIENT_ID") and os.environ.get("TEARDROP_CLIENT_SECRET"):
+        return "env:client"
+
+    # Stored email + secret (keyring)
+    if _keyring_available():
+        import keyring
+
+        email = keyring.get_password(_KEYRING_SERVICE, _KEYRING_EMAIL_KEY)
+        secret = keyring.get_password(_KEYRING_SERVICE, _KEYRING_SECRET_KEY)
+        if email and secret:
+            return "keyring:email"
+        cid = keyring.get_password(_KEYRING_SERVICE, _KEYRING_CLIENT_ID_KEY)
+        csecret = keyring.get_password(_KEYRING_SERVICE, _KEYRING_CLIENT_SECRET_KEY)
+        if cid and csecret:
+            return "keyring:client"
+
+    # Config file
+    cfg = load_config()
+    if cfg.get("access_token"):
+        return "config:token"
+    if cfg.get("auth", {}).get("token"):
+        return "config:legacy_token"
+
+    return None
 
 
 # ---------------------------------------------------------------------------

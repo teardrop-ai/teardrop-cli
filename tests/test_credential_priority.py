@@ -97,3 +97,60 @@ def test_env_vars_still_highest_priority(mock_keyring, mock_load_config):
             assert kwargs.get("token") == "env-token"
     finally:
         del os.environ["TEARDROP_API_KEY"]
+
+
+class TestDetectCredentialSource:
+    """Tests for config.detect_credential_source()."""
+
+    def test_env_api_key(self, mock_keyring, mock_load_config, clean_env):
+        os.environ["TEARDROP_API_KEY"] = "tok-xyz"
+        assert config.detect_credential_source() == "env:api_key"
+
+    def test_env_token_alias(self, mock_keyring, mock_load_config, clean_env):
+        os.environ["TEARDROP_TOKEN"] = "tok-xyz"
+        assert config.detect_credential_source() == "env:api_key"
+
+    def test_env_email(self, mock_keyring, mock_load_config, clean_env):
+        os.environ["TEARDROP_EMAIL"] = "u@e.com"
+        os.environ["TEARDROP_SECRET"] = "s3kr1t"
+        assert config.detect_credential_source() == "env:email"
+
+    def test_env_client(self, mock_keyring, mock_load_config, clean_env):
+        os.environ["TEARDROP_CLIENT_ID"] = "cid"
+        os.environ["TEARDROP_CLIENT_SECRET"] = "csecret"
+        assert config.detect_credential_source() == "env:client"
+
+    def test_keyring_email(self, mock_keyring, mock_load_config, clean_env):
+        def side_effect(service, key):
+            if key == config._KEYRING_EMAIL_KEY:
+                return "u@e.com"
+            if key == config._KEYRING_SECRET_KEY:
+                return "s3kr1t"
+            return None
+        mock_keyring.side_effect = side_effect
+        assert config.detect_credential_source() == "keyring:email"
+
+    def test_keyring_client(self, mock_keyring, mock_load_config, clean_env):
+        def side_effect(service, key):
+            if key == config._KEYRING_CLIENT_ID_KEY:
+                return "cid"
+            if key == config._KEYRING_CLIENT_SECRET_KEY:
+                return "csecret"
+            return None
+        mock_keyring.side_effect = side_effect
+        assert config.detect_credential_source() == "keyring:client"
+
+    def test_config_token(self, mock_keyring, mock_load_config, clean_env):
+        mock_load_config.return_value = {"access_token": "tok-abc"}
+        mock_keyring.return_value = None
+        assert config.detect_credential_source() == "config:token"
+
+    def test_config_legacy_token(self, mock_keyring, mock_load_config, clean_env):
+        mock_load_config.return_value = {"auth": {"token": "tok-legacy"}}
+        mock_keyring.return_value = None
+        assert config.detect_credential_source() == "config:legacy_token"
+
+    def test_none(self, mock_keyring, mock_load_config, clean_env):
+        mock_keyring.return_value = None
+        mock_load_config.return_value = {}
+        assert config.detect_credential_source() is None

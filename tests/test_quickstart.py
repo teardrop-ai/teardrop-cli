@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from click.testing import CliRunner
 
+from teardrop_cli import config
 from teardrop_cli.cli import app
 
 
@@ -18,6 +19,15 @@ class TestQuickstartCredCheck:
         assert result.exit_code == 0, result.output
         assert "existing credentials" in result.output.lower()
 
+    def test_existing_creds_shows_source_label(
+        self, runner: CliRunner, monkeypatch
+    ):
+        """When TEARDROP_API_KEY is set, the source label is displayed."""
+        monkeypatch.setenv("TEARDROP_API_KEY", "fake-jwt")
+        result = runner.invoke(app, ["quickstart"], input="y\n4\n")
+        assert result.exit_code == 0, result.output
+        assert "(source: env:api_key)" in result.output
+
     def test_keyring_creds_short_circuit(
         self, runner: CliRunner, monkeypatch
     ):
@@ -30,9 +40,8 @@ class TestQuickstartCredCheck:
         # mock_keyring fixture (autouse) provides an in-memory keyring backend.
         import keyring
 
-        from teardrop_cli.config import _KEYRING_EMAIL_KEY, _KEYRING_SECRET_KEY, _KEYRING_SERVICE
-        keyring.set_password(_KEYRING_SERVICE, _KEYRING_EMAIL_KEY, "user@example.com")
-        keyring.set_password(_KEYRING_SERVICE, _KEYRING_SECRET_KEY, "hunter2")
+        keyring.set_password(config._KEYRING_SERVICE, config._KEYRING_EMAIL_KEY, "user@example.com")
+        keyring.set_password(config._KEYRING_SERVICE, config._KEYRING_SECRET_KEY, "hunter2")
 
         result = runner.invoke(app, ["quickstart"], input="y\n4\n")
         assert result.exit_code == 0, result.output

@@ -32,6 +32,7 @@ def _run_quickstart(base_url: str | None) -> None:
     from teardrop_cli import config
     if config.has_existing_credentials():
         console.print("[dim]Existing credentials detected.[/dim]")
+        console.print(f"[dim](source: {config.detect_credential_source()})[/dim]")
         if typer.confirm("Use them?", default=True):
             print_success("Using existing credentials.")
         else:
@@ -45,8 +46,7 @@ def _run_quickstart(base_url: str | None) -> None:
     console.print("  [cyan]1[/cyan]  Scaffold a tool to publish")
     console.print("  [cyan]2[/cyan]  Run a sample agent prompt")
     console.print("  [cyan]3[/cyan]  Browse marketplace tools")
-    console.print("  [cyan]4[/cyan]  Exit")
-    choice = typer.prompt("Choice", default="2")
+    choice = typer.prompt("Choice", default="2", show_default=False)
 
     if choice == "1":
         _scaffold_branch()
@@ -56,47 +56,6 @@ def _run_quickstart(base_url: str | None) -> None:
         _marketplace_browse_branch(base_url)
     else:
         console.print("\nAll set. Run [bold]teardrop --help[/bold] to explore commands.")
-
-
-def _has_existing_credentials() -> bool:
-    """True if get_client() would succeed without prompting the user.
-
-    Mirrors the full resolution order in config.get_client() so the wizard
-    never shows an auth prompt when valid credentials already exist.
-    """
-    import os
-
-    from teardrop_cli import config
-
-    # Env vars (priorities 1-3)
-    if os.environ.get("TEARDROP_API_KEY") or os.environ.get("TEARDROP_TOKEN"):
-        return True
-    if os.environ.get("TEARDROP_EMAIL") and os.environ.get("TEARDROP_SECRET"):
-        return True
-    if os.environ.get("TEARDROP_CLIENT_ID") and os.environ.get("TEARDROP_CLIENT_SECRET"):
-        return True
-
-    # Config file (priority 4)
-    cfg = config.load_config()
-    if cfg.get("access_token") or cfg.get("auth", {}).get("token"):
-        return True
-
-    # Keyring (priority 5) — mirrors get_client() fallback
-    if config._keyring_available():
-        import keyring
-
-        email = keyring.get_password(config._KEYRING_SERVICE, config._KEYRING_EMAIL_KEY)
-        secret = keyring.get_password(config._KEYRING_SERVICE, config._KEYRING_SECRET_KEY)
-        if email and secret:
-            return True
-        cid = keyring.get_password(config._KEYRING_SERVICE, config._KEYRING_CLIENT_ID_KEY)
-        csecret = keyring.get_password(
-            config._KEYRING_SERVICE, config._KEYRING_CLIENT_SECRET_KEY
-        )
-        if cid and csecret:
-            return True
-
-    return False
 
 
 def _auth_menu(base_url: str | None) -> None:

@@ -29,8 +29,13 @@ def _cost_dollars(atomic: int | None) -> str:
         return f"${int(atomic) / 1_000_000:.4f}"
 
 
-async def _fetch_catalog(client) -> list[dict]:
-    """Fetch the full catalog and return a flat list of tool dicts."""
+async def _fetch_catalog(client, *, include_platform: bool = False) -> list[dict]:
+    """Fetch the marketplace catalog and return a flat list of tool dicts.
+
+    By default, platform built-in tools (``tool_type == "platform"``) are
+    filtered out since they are not subscribable.  Pass ``include_platform=True``
+    to include them.
+    """
     from pydantic import ValidationError as PydanticValidationError
 
     try:
@@ -50,8 +55,12 @@ async def _fetch_catalog(client) -> list[dict]:
     if hasattr(result, "model_dump"):
         result = result.model_dump()
     tools = result.get("tools", result.get("items", []))
-    return [t.model_dump() if hasattr(t, "model_dump") else dict(t) for t in tools]
+    tools = [t.model_dump() if hasattr(t, "model_dump") else dict(t) for t in tools]
 
+    if not include_platform:
+        tools = [t for t in tools if t.get("tool_type") != "platform"]
+
+    return tools
 
 # ---------------------------------------------------------------------------
 # list
@@ -63,6 +72,9 @@ def list_cmd(
     category: Annotated[
         str | None, typer.Option("--category", help="Filter by category.")
     ] = None,
+    include_platform: Annotated[
+        bool, typer.Option("--include-platform", help="Include built-in platform tools.")
+    ] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
@@ -74,7 +86,7 @@ def list_cmd(
 
     async def _fetch():
         try:
-            return await _fetch_catalog(client)
+            return await _fetch_catalog(client, include_platform=include_platform)
         finally:
             await client.close()
 
@@ -118,6 +130,9 @@ def list_cmd(
 @app.command()
 def search(
     query: Annotated[str, typer.Argument(help="Search query.")],
+    include_platform: Annotated[
+        bool, typer.Option("--include-platform", help="Include built-in platform tools.")
+    ] = False,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
@@ -129,7 +144,7 @@ def search(
 
     async def _fetch():
         try:
-            return await _fetch_catalog(client)
+            return await _fetch_catalog(client, include_platform=include_platform)
         finally:
             await client.close()
 
@@ -188,7 +203,7 @@ def info(
 
     async def _fetch():
         try:
-            return await _fetch_catalog(client)
+            return await _fetch_catalog(client, include_platform=True)
         finally:
             await client.close()
 
@@ -205,13 +220,24 @@ def info(
         print_json(tool)
         return
 
+    is_platform = tool.get("tool_type") == "platform"
+
     rows = [
         ["Name", tool.get("name", "—")],
         ["Author", tool.get("author") or tool.get("author_slug", "—")],
         ["Price/Call", _cost_dollars(tool.get("cost_usdc"))],
+        ["Type", "Platform (built-in)" if is_platform else "Community"],
         ["Description", tool.get("description", "—")],
     ]
     print_table([("Field", {"style": "bold cyan"}), "Value"], rows, title=qualified_name)
+
+    if is_platform:
+        from teardrop_cli.formatting import console
+
+        console.print(
+            "\n[dim]This is a built-in platform tool — available to all agents, "
+            "no subscription needed.[/dim]"
+        )
 
     schema = tool.get("input_schema")
     if schema:
@@ -246,14 +272,23 @@ def subscribe(
         spinner,
     )
 
+    # Look up the tool to check if it exists and is subscribable.
+    public = config.get_client(base_url, require_auth=False)
+    try:
+        tools = asyncio.run(_lookup_then_close(public, qualified_name, include_platform=True))
+    except Exception:
+        tools = []
+    match = next((t for t in tools if t.get("name") == qualified_name), None)
+
+    # Early guard: platform tools are not subscribable.
+    if match and match.get("tool_type") == "platform":
+        print_error(
+            f"{qualified_name!r} is a built-in platform tool and cannot be subscribed to. "
+            "It is available to all agents automatically."
+        )
+        raise typer.Exit(1)
+
     if not yes:
-        # Lookup price for confirmation
-        public = config.get_client(base_url, require_auth=False)
-        try:
-            tools = asyncio.run(_lookup_then_close(public, qualified_name))
-        except Exception:
-            tools = []
-        match = next((t for t in tools if t.get("name") == qualified_name), None)
         cost_label = _cost_dollars(match.get("cost_usdc")) if match else "?"
         console.print(f"Subscribe to [bold]{qualified_name}[/bold]?")
         console.print(f"  Cost: {cost_label}/call")
@@ -306,9 +341,9 @@ async def _fetch_subscriptions(client) -> list[dict]:
         return data.get("subscriptions", data.get("items", []))
 
 
-async def _lookup_then_close(client, qualified_name: str) -> list[dict]:
+async def _lookup_then_close(client, qualified_name: str, *, include_platform: bool = False) -> list[dict]:
     try:
-        return await _fetch_catalog(client)
+        return await _fetch_catalog(client, include_platform=include_platform)
     finally:
         await client.close()
 

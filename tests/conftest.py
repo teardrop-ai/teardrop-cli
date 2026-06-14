@@ -141,12 +141,21 @@ def mock_client():
         return_value={
             "tools": [
                 {
+                    "name": "platform/transmute",
+                    "author_slug": "platform",
+                    "tool_type": "platform",
+                    "cost_usdc": None,
+                    "description": "Built-in transmutation spell",
+                    "input_schema": {"type": "object", "properties": {}},
+                },
+                {
                     "name": "acme/weather",
                     "author": "acme",
+                    "tool_type": "community",
                     "cost_usdc": 5000,
                     "description": "Get the weather",
                     "input_schema": {"type": "object", "properties": {}},
-                }
+                },
             ],
             "next_cursor": None,
         }
