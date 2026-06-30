@@ -28,21 +28,15 @@ class TestGet:
 
 
 class TestSet:
-    def test_set_merges_existing(
-        self, runner: CliRunner, patch_get_client, mock_client
-    ):
-        result = runner.invoke(
-            app, ["llm-config", "set", "--max-tokens", "8192"]
-        )
+    def test_set_merges_existing(self, runner: CliRunner, patch_get_client, mock_client):
+        result = runner.invoke(app, ["llm-config", "set", "--max-tokens", "8192"])
         assert result.exit_code == 0, result.output
         # Read-then-write merge: get_llm_config called first
         mock_client.get_llm_config.assert_awaited()
         mock_client.set_llm_config.assert_awaited()
 
     def test_set_invalid_provider(self, runner: CliRunner, patch_get_client):
-        result = runner.invoke(
-            app, ["llm-config", "set", "--provider", "bogus"]
-        )
+        result = runner.invoke(app, ["llm-config", "set", "--provider", "bogus"])
         assert result.exit_code != 0
 
     def test_set_clear_key(self, runner: CliRunner, patch_get_client, mock_client):

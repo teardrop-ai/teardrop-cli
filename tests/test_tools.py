@@ -50,9 +50,7 @@ class TestInfo:
 
 
 class TestPublish:
-    def test_publish_from_file(
-        self, runner: CliRunner, patch_get_client, mock_client, tmp_path
-    ):
+    def test_publish_from_file(self, runner: CliRunner, patch_get_client, mock_client, tmp_path):
         import json
 
         spec = {
@@ -70,9 +68,7 @@ class TestPublish:
         assert result.exit_code == 0, result.output
         mock_client.create_tool.assert_awaited()
 
-    def test_publish_invalid_name(
-        self, runner: CliRunner, patch_get_client, tmp_path
-    ):
+    def test_publish_invalid_name(self, runner: CliRunner, patch_get_client, tmp_path):
         import json
 
         spec = {
@@ -94,13 +90,9 @@ class TestUpdate:
         result = runner.invoke(app, ["tools", "update", "my_tool"])
         assert result.exit_code == 1
 
-    def test_update_description(
-        self, runner: CliRunner, patch_get_client, mock_client
-    ):
+    def test_update_description(self, runner: CliRunner, patch_get_client, mock_client):
         mock_client.list_tools.return_value = [_tool_obj()]
-        result = runner.invoke(
-            app, ["tools", "update", "my_tool", "--description", "new"]
-        )
+        result = runner.invoke(app, ["tools", "update", "my_tool", "--description", "new"])
         assert result.exit_code == 0, result.output
         mock_client.update_tool.assert_awaited()
 
@@ -114,9 +106,7 @@ class TestPause:
 
 
 class TestProbe:
-    def test_probe_success(
-        self, runner: CliRunner, patch_get_client, mock_client, monkeypatch
-    ):
+    def test_probe_success(self, runner: CliRunner, patch_get_client, mock_client, monkeypatch):
         mock_client.list_tools.return_value = [_tool_obj()]
         mock_client.get_tool = AsyncMock(return_value=_tool_obj())
 
@@ -210,18 +200,14 @@ class TestProbe:
         assert result.exit_code == 1
         assert "required together" in result.output
 
-    def test_probe_invalid_payload(
-        self, runner: CliRunner, patch_get_client, mock_client
-    ):
+    def test_probe_invalid_payload(self, runner: CliRunner, patch_get_client, mock_client):
         mock_client.list_tools.return_value = [_tool_obj()]
         mock_client.get_tool = AsyncMock(return_value=_tool_obj())
         result = runner.invoke(app, ["tools", "probe", "my_tool", "--payload", "not-json"])
         assert result.exit_code == 1
         assert "Invalid JSON" in result.output
 
-    def test_probe_timeout(
-        self, runner: CliRunner, patch_get_client, mock_client, monkeypatch
-    ):
+    def test_probe_timeout(self, runner: CliRunner, patch_get_client, mock_client, monkeypatch):
         import httpx
 
         mock_client.list_tools.return_value = [_tool_obj()]

@@ -17,9 +17,7 @@ from teardrop_cli.cli import app
 class TestToolsInit:
     def test_writes_valid_json(self, runner: CliRunner, tmp_path: Path):
         out = tmp_path / "tool.json"
-        result = runner.invoke(
-            app, ["tools", "init", "my_scraper", "--out", str(out)]
-        )
+        result = runner.invoke(app, ["tools", "init", "my_scraper", "--out", str(out)])
         assert result.exit_code == 0, result.output
         assert out.exists()
         data = json.loads(out.read_text())
@@ -34,18 +32,14 @@ class TestToolsInit:
     def test_refuses_overwrite(self, runner: CliRunner, tmp_path: Path):
         out = tmp_path / "tool.json"
         out.write_text("{}")
-        result = runner.invoke(
-            app, ["tools", "init", "thing", "--out", str(out)]
-        )
+        result = runner.invoke(app, ["tools", "init", "thing", "--out", str(out)])
         assert result.exit_code == 1
         assert "exists" in result.output.lower()
 
     def test_force_overwrites(self, runner: CliRunner, tmp_path: Path):
         out = tmp_path / "tool.json"
         out.write_text('{"name":"old"}')
-        result = runner.invoke(
-            app, ["tools", "init", "newname", "--out", str(out), "--force"]
-        )
+        result = runner.invoke(app, ["tools", "init", "newname", "--out", str(out), "--force"])
         assert result.exit_code == 0, result.output
         data = json.loads(out.read_text())
         assert data["name"] == "newname"
@@ -64,9 +58,7 @@ class TestToolsInit:
 
     def test_invalid_name_rejected(self, runner: CliRunner, tmp_path: Path):
         out = tmp_path / "tool.json"
-        result = runner.invoke(
-            app, ["tools", "init", "BadName", "--out", str(out)]
-        )
+        result = runner.invoke(app, ["tools", "init", "BadName", "--out", str(out)])
         assert result.exit_code == 1
         assert "invalid" in result.output.lower()
         assert not out.exists()
@@ -80,10 +72,19 @@ class TestToolsInit:
         # Every expected key present in the right order.
         keys = list(data.keys())
         assert keys == [
-            "name", "description", "input_schema", "output_schema",
-            "webhook_url", "webhook_method", "auth_header_name",
-            "auth_header_value", "timeout_seconds", "publish_as_mcp",
-            "marketplace_description", "category", "base_price_usdc",
+            "name",
+            "description",
+            "input_schema",
+            "output_schema",
+            "webhook_url",
+            "webhook_method",
+            "auth_header_name",
+            "auth_header_value",
+            "timeout_seconds",
+            "publish_as_mcp",
+            "marketplace_description",
+            "category",
+            "base_price_usdc",
         ]
 
         # Input schema has additionalProperties: false
@@ -116,10 +117,19 @@ class TestToolsInit:
 
         # Same key set as base
         assert list(data.keys()) == [
-            "name", "description", "input_schema", "output_schema",
-            "webhook_url", "webhook_method", "auth_header_name",
-            "auth_header_value", "timeout_seconds", "publish_as_mcp",
-            "marketplace_description", "category", "base_price_usdc",
+            "name",
+            "description",
+            "input_schema",
+            "output_schema",
+            "webhook_url",
+            "webhook_method",
+            "auth_header_name",
+            "auth_header_value",
+            "timeout_seconds",
+            "publish_as_mcp",
+            "marketplace_description",
+            "category",
+            "base_price_usdc",
         ]
 
         # These flip from base defaults
@@ -143,9 +153,7 @@ class TestToolsInit:
 
 
 class TestLlmConfigByok:
-    def test_byok_interactive_happy_path(
-        self, runner: CliRunner, patch_get_client
-    ):
+    def test_byok_interactive_happy_path(self, runner: CliRunner, patch_get_client):
         """End-to-end: pick provider 1, accept default model, choose routing,
         paste key. Should call ``client.set_llm_config`` with all four args."""
         # Inputs in order:

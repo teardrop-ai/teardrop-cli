@@ -44,16 +44,12 @@ class TestChatBasic:
         assert result.exit_code == 2
         assert "Invalid --context" in result.output
 
-    def test_chat_estimate_cost_short_circuits(
-        self, runner: CliRunner, patch_get_client
-    ):
+    def test_chat_estimate_cost_short_circuits(self, runner: CliRunner, patch_get_client):
         result = runner.invoke(app, ["chat", "hello", "--estimate-cost"])
         assert result.exit_code == 0
         assert "Cost Estimate" in result.output or "USDC" in result.output
 
-    def test_chat_payment_required_error(
-        self, runner: CliRunner, patch_get_client, mock_client
-    ):
+    def test_chat_payment_required_error(self, runner: CliRunner, patch_get_client, mock_client):
         from teardrop import PaymentRequiredError
 
         async def _fail(*a, **kw):
@@ -80,6 +76,7 @@ class TestChatBasic:
     def test_chat_json_output(self, runner: CliRunner, patch_get_client, mock_client):
         """Chat --json should include thread_id."""
         thread_id = "thr_chat_json"
+
         async def _emit(*a, **kw):
             yield _make_text_event("ok", thread_id=thread_id)
             yield _make_done_event()
@@ -219,9 +216,7 @@ class TestChatToolPolicy:
         assert result.exit_code == 0, result.output
         assert captured["exclude"] == ["platform/web_search"]
 
-    def test_chat_with_context(
-        self, runner: CliRunner, patch_get_client, mock_client
-    ):
+    def test_chat_with_context(self, runner: CliRunner, patch_get_client, mock_client):
         captured = {}
 
         async def _capture(message, **kwargs):
@@ -230,8 +225,6 @@ class TestChatToolPolicy:
             yield _make_done_event()
 
         mock_client.run = _capture
-        result = runner.invoke(
-            app, ["chat", "hello", "--context", '{"k":"v"}']
-        )
+        result = runner.invoke(app, ["chat", "hello", "--context", '{"k":"v"}'])
         assert result.exit_code == 0, result.output
         assert captured["context"] == {"k": "v"}

@@ -121,9 +121,7 @@ def mock_client():
     )
     from teardrop_cli._fixtures import make_credit_history_entries
 
-    client.get_credit_history = AsyncMock(
-        return_value=make_credit_history_entries(count=3)
-    )
+    client.get_credit_history = AsyncMock(return_value=make_credit_history_entries(count=3))
     client.topup_stripe = AsyncMock(
         return_value={
             "session_id": "cs_test_1",
@@ -195,6 +193,116 @@ def mock_client():
     )
     client.discover_mcp_server_tools = AsyncMock(return_value=MagicMock(tools=[]))
     client.delete_mcp_server = AsyncMock(return_value=None)
+
+    # schedules
+    client.schedules = MagicMock(name="schedules")
+    client.schedules.create = AsyncMock(
+        return_value={
+            "id": "sch_1",
+            "name": "daily-report",
+            "prompt": "Generate a report",
+            "schedule_kind": "interval",
+            "interval_seconds": 60,
+            "enabled": True,
+            "callback_url": None,
+            "next_run_at": "2026-06-29T12:05:00Z",
+            "last_run_at": "2026-06-29T12:00:00Z",
+            "consecutive_failures": 0,
+            "created_at": "2026-06-29T12:00:00Z",
+            "updated_at": "2026-06-29T12:00:00Z",
+        }
+    )
+    client.schedules.list = AsyncMock(return_value=[])
+    client.schedules.get = AsyncMock(
+        return_value={
+            "id": "sch_1",
+            "name": "daily-report",
+            "prompt": "Generate a report",
+            "schedule_kind": "interval",
+            "interval_seconds": 60,
+            "enabled": True,
+            "callback_url": None,
+            "next_run_at": "2026-06-29T12:05:00Z",
+            "last_run_at": "2026-06-29T12:00:00Z",
+            "consecutive_failures": 0,
+            "created_at": "2026-06-29T12:00:00Z",
+            "updated_at": "2026-06-29T12:00:00Z",
+        }
+    )
+    client.schedules.update = AsyncMock(
+        return_value={
+            "id": "sch_1",
+            "name": "daily-report",
+            "prompt": "Generate a report",
+            "schedule_kind": "interval",
+            "interval_seconds": 60,
+            "enabled": True,
+            "callback_url": None,
+            "next_run_at": "2026-06-29T12:05:00Z",
+            "last_run_at": "2026-06-29T12:00:00Z",
+            "consecutive_failures": 0,
+            "created_at": "2026-06-29T12:00:00Z",
+            "updated_at": "2026-06-29T12:00:00Z",
+        }
+    )
+    client.schedules.delete = AsyncMock(return_value=None)
+    client.schedules.runs = AsyncMock(return_value={"items": [], "next_cursor": None})
+
+    # event triggers
+    client.event_triggers = MagicMock(name="event_triggers")
+    client.event_triggers.create = AsyncMock(
+        return_value={
+            "id": "evt_1",
+            "name": "webhook-trigger",
+            "prompt": "Handle inbound webhook",
+            "schedule_kind": "event",
+            "enabled": True,
+            "callback_url": None,
+            "trigger_token": "pub_123",
+            "event_path": "/agent/events/pub_123",
+            "consecutive_failures": 0,
+            "last_run_at": None,
+            "created_at": "2026-06-29T12:00:00Z",
+            "updated_at": "2026-06-29T12:00:00Z",
+            "secret": "top-secret",
+        }
+    )
+    client.event_triggers.list = AsyncMock(return_value=[])
+    client.event_triggers.get = AsyncMock(
+        return_value={
+            "id": "evt_1",
+            "name": "webhook-trigger",
+            "prompt": "Handle inbound webhook",
+            "schedule_kind": "event",
+            "enabled": True,
+            "callback_url": None,
+            "trigger_token": "pub_123",
+            "event_path": "/agent/events/pub_123",
+            "consecutive_failures": 0,
+            "last_run_at": None,
+            "created_at": "2026-06-29T12:00:00Z",
+            "updated_at": "2026-06-29T12:00:00Z",
+        }
+    )
+    client.event_triggers.update = AsyncMock(
+        return_value={
+            "id": "evt_1",
+            "name": "webhook-trigger",
+            "prompt": "Handle inbound webhook",
+            "schedule_kind": "event",
+            "enabled": True,
+            "callback_url": None,
+            "trigger_token": "pub_123",
+            "event_path": "/agent/events/pub_123",
+            "consecutive_failures": 0,
+            "last_run_at": None,
+            "created_at": "2026-06-29T12:00:00Z",
+            "updated_at": "2026-06-29T12:00:00Z",
+        }
+    )
+    client.event_triggers.delete = AsyncMock(return_value=None)
+    client.event_triggers.rotate_secret = AsyncMock(return_value={"secret": "rotated-secret"})
+    client.event_triggers.runs = AsyncMock(return_value={"items": [], "next_cursor": None})
 
     # tools
     client.list_tools = AsyncMock(return_value=[])

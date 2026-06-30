@@ -44,9 +44,7 @@ async def _fetch_catalog(client, *, include_platform: bool = False) -> list[dict
         # SDK model is out of sync with the API response (e.g. a required field is
         # absent).  Fall back to the raw HTTP layer so the CLI keeps working.
         http = await client._get_http()
-        resp = await http.get(
-            f"{client._base_url}/marketplace/catalog", params={"limit": 100}
-        )
+        resp = await http.get(f"{client._base_url}/marketplace/catalog", params={"limit": 100})
         client._raise_for_status(resp)
         data = resp.json()
         tools = data.get("tools", data.get("items", []))
@@ -62,6 +60,7 @@ async def _fetch_catalog(client, *, include_platform: bool = False) -> list[dict
 
     return tools
 
+
 # ---------------------------------------------------------------------------
 # list
 # ---------------------------------------------------------------------------
@@ -69,9 +68,7 @@ async def _fetch_catalog(client, *, include_platform: bool = False) -> list[dict
 
 @app.command(name="list")
 def list_cmd(
-    category: Annotated[
-        str | None, typer.Option("--category", help="Filter by category.")
-    ] = None,
+    category: Annotated[str | None, typer.Option("--category", help="Filter by category.")] = None,
     include_platform: Annotated[
         bool, typer.Option("--include-platform", help="Include built-in platform tools.")
     ] = False,
@@ -94,9 +91,7 @@ def list_cmd(
         tools = asyncio.run(_fetch())
 
     if category:
-        tools = [
-            t for t in tools if (t.get("category") or "").lower() == category.lower()
-        ]
+        tools = [t for t in tools if (t.get("category") or "").lower() == category.lower()]
 
     if as_json:
         print_json(tools)
@@ -341,7 +336,9 @@ async def _fetch_subscriptions(client) -> list[dict]:
         return data.get("subscriptions", data.get("items", []))
 
 
-async def _lookup_then_close(client, qualified_name: str, *, include_platform: bool = False) -> list[dict]:
+async def _lookup_then_close(
+    client, qualified_name: str, *, include_platform: bool = False
+) -> list[dict]:
     try:
         return await _fetch_catalog(client, include_platform=include_platform)
     finally:
@@ -424,7 +421,5 @@ def subscriptions(
         data_console.print("[dim]No active subscriptions.[/dim]")
         return
 
-    rows = [
-        [s.get("qualified_tool_name", "—"), s.get("subscribed_at", "—")] for s in items
-    ]
+    rows = [[s.get("qualified_tool_name", "—"), s.get("subscribed_at", "—")] for s in items]
     print_table(["Tool", "Subscribed At"], rows, title="Subscriptions")

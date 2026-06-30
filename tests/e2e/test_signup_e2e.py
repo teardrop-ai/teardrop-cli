@@ -32,23 +32,16 @@ pytestmark = pytest.mark.e2e
 def _require_signup_optin() -> None:
     if not os.environ.get("TEARDROP_E2E_SIGNUP"):
         pytest.skip(
-            "Set TEARDROP_E2E_SIGNUP=1 to run the live signup test "
-            "(creates a real account)."
+            "Set TEARDROP_E2E_SIGNUP=1 to run the live signup test (creates a real account)."
         )
 
 
 def test_signup_creates_account(_require_signup_optin):
     """Happy-path: POST /register returns 201 with a usable JWT."""
     rand = secrets.token_hex(4)
-    email = os.environ.get(
-        "TEARDROP_E2E_SIGNUP_EMAIL", f"signup-e2e+{rand}@teardrop.test"
-    )
-    password = os.environ.get(
-        "TEARDROP_E2E_SIGNUP_PASSWORD", f"Pw{secrets.token_hex(8)}1"
-    )
-    org = os.environ.get(
-        "TEARDROP_E2E_SIGNUP_ORG", f"teardrop-cli-e2e-{rand}"
-    )
+    email = os.environ.get("TEARDROP_E2E_SIGNUP_EMAIL", f"signup-e2e+{rand}@teardrop.test")
+    password = os.environ.get("TEARDROP_E2E_SIGNUP_PASSWORD", f"Pw{secrets.token_hex(8)}1")
+    org = os.environ.get("TEARDROP_E2E_SIGNUP_ORG", f"teardrop-cli-e2e-{rand}")
 
     runner = CliRunner()
     result = runner.invoke(

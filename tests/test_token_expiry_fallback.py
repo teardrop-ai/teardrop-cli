@@ -29,8 +29,10 @@ async def test_handle_token_expiry_fail_on_no_email_non_interactive():
 
     exc = AuthenticationError("Token has expired")
 
-    with patch("teardrop_cli.config.detect_credential_source") as mock_source, \
-         patch("teardrop_cli.config.get_siwe_key") as mock_siwe:
+    with (
+        patch("teardrop_cli.config.detect_credential_source") as mock_source,
+        patch("teardrop_cli.config.get_siwe_key") as mock_siwe,
+    ):
         # Config token source, no SIWE key to recover with.
         mock_source.return_value = "config:token"
         mock_siwe.return_value = None
@@ -49,10 +51,12 @@ async def test_handle_token_expiry_prompt_login_for_config_token_interactive():
 
     exc = AuthenticationError("Token has expired")
 
-    with patch("teardrop_cli.config.detect_credential_source") as mock_source, \
-         patch("teardrop_cli.config.get_siwe_key") as mock_siwe, \
-         patch("teardrop_cli.formatting.print_warning") as mock_warn, \
-         patch("teardrop_cli.formatting.print_error") as mock_err:
+    with (
+        patch("teardrop_cli.config.detect_credential_source") as mock_source,
+        patch("teardrop_cli.config.get_siwe_key") as mock_siwe,
+        patch("teardrop_cli.formatting.print_warning") as mock_warn,
+        patch("teardrop_cli.formatting.print_error") as mock_err,
+    ):
         mock_source.return_value = "config:token"
         mock_siwe.return_value = None
 
@@ -60,7 +64,9 @@ async def test_handle_token_expiry_prompt_login_for_config_token_interactive():
 
         assert action == "prompt_login"
         mock_err.assert_not_called()
-        assert any("Stored session has expired" in call.args[0] for call in mock_warn.call_args_list)
+        assert any(
+            "Stored session has expired" in call.args[0] for call in mock_warn.call_args_list
+        )
 
 
 @pytest.mark.asyncio
@@ -81,10 +87,12 @@ async def test_handle_token_expiry_retry_on_siwe_key():
 
     exc = AuthenticationError("Token has expired")
 
-    with patch("teardrop_cli.config.detect_credential_source") as mock_source, \
-         patch("teardrop_cli.config.get_siwe_key") as mock_siwe, \
-         patch("teardrop_cli.commands.auth._siwe_auth_async") as mock_siwe_auth, \
-         patch("teardrop_cli.config.store_session") as mock_store:
+    with (
+        patch("teardrop_cli.config.detect_credential_source") as mock_source,
+        patch("teardrop_cli.config.get_siwe_key") as mock_siwe,
+        patch("teardrop_cli.commands.auth._siwe_auth_async") as mock_siwe_auth,
+        patch("teardrop_cli.config.store_session") as mock_store,
+    ):
         # Config-token source with SIWE key present.
         mock_source.return_value = "config:token"
         mock_siwe.return_value = ("0xdeadbeef" * 8, "0xABCDEF123456789")
@@ -109,9 +117,11 @@ async def test_handle_token_expiry_env_api_key_skips_siwe():
 
     exc = AuthenticationError("Token has expired")
 
-    with patch("teardrop_cli.config.detect_credential_source") as mock_source, \
-         patch("teardrop_cli.config.get_siwe_key") as mock_siwe, \
-         patch("teardrop_cli.commands.auth._siwe_auth_async") as mock_siwe_auth:
+    with (
+        patch("teardrop_cli.config.detect_credential_source") as mock_source,
+        patch("teardrop_cli.config.get_siwe_key") as mock_siwe,
+        patch("teardrop_cli.commands.auth._siwe_auth_async") as mock_siwe_auth,
+    ):
         mock_source.return_value = "env:api_key"
         mock_siwe.return_value = ("0xdeadbeef" * 8, "0xABCDEF123456789")
 

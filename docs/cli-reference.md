@@ -9,6 +9,8 @@ This document covers every flag, env var, and subcommand. For the quick path, st
 - [Authentication](#authentication)
 - [Running Agents](#running-agents)
 - [Chat Sessions](#chat-sessions)
+- [Schedules](#schedules)
+- [Event Triggers](#event-triggers)
 - [Billing & Credits](#billing--credits)
 - [Tool Management](#tool-management)
 - [Marketplace](#marketplace)
@@ -116,6 +118,60 @@ Chat supports all the same options as `run` (`--context`, `--exclude`, `--policy
 **Logout clears state**: `teardrop auth logout` removes both credentials **and**
 the active thread id from the config file. The next `teardrop chat` after logout
 will start a fresh thread.
+
+---
+
+## Schedules
+
+Recurring interval-based runs:
+
+```bash
+teardrop schedules create \
+  --name hourly-briefing \
+  --prompt "Summarize open incidents" \
+  --interval-seconds 3600
+
+teardrop schedules list
+teardrop schedules get <schedule-id>
+teardrop schedules update <schedule-id> --enabled false
+teardrop schedules update <schedule-id> --clear-callback-url
+teardrop schedules runs <schedule-id> --limit 50 --json
+teardrop schedules delete <schedule-id>
+teardrop schedules delete <schedule-id> --yes
+```
+
+Non-JSON list output includes: `ID`, `Name`, `Enabled`, `Interval`, `Consecutive Failures`, `Last Run At`.
+
+Run history output includes: `Run ID`, `Status`, `Cost (USDC)`, `Error Message`, `Executed At`.
+
+`--clear-callback-url` sends an explicit `null` callback URL while still preserving PATCH semantics for all other omitted fields.
+
+---
+
+## Event Triggers
+
+Reactive runs exposed as signed public webhook endpoints:
+
+```bash
+teardrop event-triggers create \
+  --name inbound-orders \
+  --prompt "Validate and process this order payload"
+
+teardrop event-triggers list
+teardrop event-triggers get <trigger-id>
+teardrop event-triggers update <trigger-id> --enabled false
+teardrop event-triggers update <trigger-id> --callback-url https://example.com/hook
+teardrop event-triggers runs <trigger-id> --limit 50 --json
+teardrop event-triggers rotate-secret <trigger-id>
+teardrop event-triggers delete <trigger-id>
+teardrop event-triggers delete <trigger-id> --yes
+```
+
+`create` and `rotate-secret` display the signing secret once. Store it immediately; subsequent `list` and `get` calls do not return the plaintext secret.
+
+Non-JSON list output includes: `ID`, `Name`, `Enabled`, `Kind`, `Consecutive Failures`, `Last Run At`.
+
+Run history output includes: `Run ID`, `Status`, `Cost (USDC)`, `Error Message`, `Executed At`.
 
 ---
 

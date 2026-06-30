@@ -323,7 +323,7 @@ async def _render_stream(
     on_thread_id: Any = None,
 ) -> None:  # type: ignore[type-arg]
     """Async implementation of the streaming renderer.
-    
+
     Streams response text and tool calls directly to scrollback (no in-place
     updates) to ensure:
     1. Full scrollback visibility during streaming
@@ -387,6 +387,7 @@ async def _render_stream(
                 component_type = data.get("type", data.get("component", "unknown"))
                 title = data.get("title", data.get("label", ""))
                 from rich.markdown import Markdown
+
                 md_lines = [f"**UI — {component_type}**"]
                 if title:
                     md_lines[0] += f": {title}"
@@ -490,6 +491,7 @@ def _print_usage_summary(data: dict) -> None:
     total_cost = data.get("total_cost_usd", 0)
     if cost_usdc:
         from teardrop import format_usdc
+
         parts.append(f"Cost: ${format_usdc(int(cost_usdc))}")
     elif total_cost:
         parts.append(f"Cost: ${total_cost:.4f}")

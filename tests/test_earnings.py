@@ -21,16 +21,12 @@ class TestHistory:
 
 
 class TestWithdraw:
-    def test_withdraw_with_yes(
-        self, runner: CliRunner, patch_get_client, mock_client
-    ):
+    def test_withdraw_with_yes(self, runner: CliRunner, patch_get_client, mock_client):
         result = runner.invoke(app, ["earnings", "withdraw", "1.50", "--yes"])
         assert result.exit_code == 0, result.output
         mock_client.withdraw.assert_awaited()
 
-    def test_withdraw_invalid_amount(
-        self, runner: CliRunner, patch_get_client
-    ):
+    def test_withdraw_invalid_amount(self, runner: CliRunner, patch_get_client):
         result = runner.invoke(app, ["earnings", "withdraw", "abc", "--yes"])
         assert result.exit_code == 1
 

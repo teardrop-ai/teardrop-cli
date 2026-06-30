@@ -49,7 +49,9 @@ def signup(
         str | None,
         typer.Option("--org-name", help="Organization name (1–200 chars)."),
     ] = None,
-    as_json: Annotated[bool, typer.Option("--json", help="Output the JWT response as JSON.")] = False,
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Output the JWT response as JSON.")
+    ] = False,
     base_url: Annotated[
         str | None, typer.Option("--base-url", help="Override the API base URL.", hidden=True)
     ] = None,
@@ -373,9 +375,7 @@ def _resolve_siwe_private_key(
         try:
             from eth_account import Account
         except ImportError:
-            print_error(
-                "eth-account is required.", hint="pip install 'teardrop-cli[siwe]'"
-            )
+            print_error("eth-account is required.", hint="pip install 'teardrop-cli[siwe]'")
             raise typer.Exit(1) from None
         acct = Account.create()
         from rich.panel import Panel
@@ -536,9 +536,7 @@ def _login_siwe(
 
     try:
         with spinner("Signing in with Ethereum…"):
-            jwt_token = asyncio.run(
-                _siwe_auth_async(url, private_key, wallet_address)
-            )
+            jwt_token = asyncio.run(_siwe_auth_async(url, private_key, wallet_address))
     except Exception as exc:
         _handle_auth_error(exc)
         return
@@ -713,4 +711,5 @@ def invite(
     print_success(f"Invited [bold]{email}[/bold] (role: {role})")
     if link:
         from teardrop_cli.formatting import console
+
         console.print(f"  Invite link: [bold]{link}[/bold]")

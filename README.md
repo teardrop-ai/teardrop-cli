@@ -146,6 +146,33 @@ Streaming output renders Markdown live with inline tool calls and structured UI 
 
 ---
 
+## Automate Runs
+
+Use interval schedules for recurring prompts and event triggers for inbound webhooks:
+
+```bash
+teardrop schedules create \
+    --name hourly-briefing \
+    --prompt "Summarize open incidents" \
+    --interval-seconds 3600
+
+teardrop schedules list
+teardrop schedules runs <schedule-id>
+
+teardrop event-triggers create \
+    --name inbound-orders \
+    --prompt "Validate and process this order payload"
+
+teardrop event-triggers runs <trigger-id>
+teardrop event-triggers rotate-secret <trigger-id>
+```
+
+`event-triggers create` and `event-triggers rotate-secret` print the signing secret once. Store it immediately.
+
+Full reference: [docs/cli-reference.md](docs/cli-reference.md#schedules) and [docs/cli-reference.md](docs/cli-reference.md#event-triggers).
+
+---
+
 ## Chat with an Agent
 
 A stateful chat mode that automatically continues the same thread across invocations:

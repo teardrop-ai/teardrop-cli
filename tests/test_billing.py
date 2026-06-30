@@ -45,12 +45,8 @@ class TestUsage:
         assert result.exit_code == 0, result.output
         assert "Total runs" in result.output
 
-    def test_usage_with_dates(
-        self, runner: CliRunner, patch_get_client, mock_client
-    ):
-        result = runner.invoke(
-            app, ["usage", "--start", "2025-01-01", "--end", "2025-01-31"]
-        )
+    def test_usage_with_dates(self, runner: CliRunner, patch_get_client, mock_client):
+        result = runner.invoke(app, ["usage", "--start", "2025-01-01", "--end", "2025-01-31"])
         assert result.exit_code == 0, result.output
         mock_client.get_usage.assert_awaited()
 
@@ -75,4 +71,3 @@ class TestCreditHistory:
         assert isinstance(data, list)
         assert len(data) == 3
         assert data[0]["reason"] == "Subscription fee — acme/weather"
-

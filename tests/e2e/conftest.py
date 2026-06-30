@@ -52,10 +52,7 @@ def live_creds() -> dict[str, str | None]:
     base_url = os.environ.get("TEARDROP_E2E_BASE_URL", "https://api.teardrop.dev")
 
     if not token and not (email and secret):
-        pytest.skip(
-            "No credentials: set TEARDROP_API_KEY "
-            "or TEARDROP_EMAIL + TEARDROP_SECRET"
-        )
+        pytest.skip("No credentials: set TEARDROP_API_KEY or TEARDROP_EMAIL + TEARDROP_SECRET")
 
     return {"token": token, "email": email, "secret": secret, "base_url": base_url}
 

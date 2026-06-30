@@ -176,7 +176,9 @@ class TestStatus:
         # Click 8.0.x stores a UsageError in result.exception with output
         # only on stderr; Click 8.3+ stores SystemExit and writes the
         # message to stdout.  Check both sources to stay compatible.
-        assert "No such command" in result.output or (result.exception and "No such command" in str(result.exception))
+        assert "No such command" in result.output or (
+            result.exception and "No such command" in str(result.exception)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -198,16 +200,12 @@ class TestLogout:
         assert result.exit_code == 0
         assert cleared.get("done")
 
-    def test_logout_calls_server_when_refresh_present(
-        self, runner: CliRunner, monkeypatch
-    ):
+    def test_logout_calls_server_when_refresh_present(self, runner: CliRunner, monkeypatch):
         called = {}
         monkeypatch.setattr(
             "teardrop_cli.config.clear_credentials", lambda: called.update({"clr": True})
         )
-        monkeypatch.setattr(
-            "teardrop_cli.config.get_refresh_token", lambda: "rt-123"
-        )
+        monkeypatch.setattr("teardrop_cli.config.get_refresh_token", lambda: "rt-123")
 
         mock_client = MagicMock()
         mock_client.logout = AsyncMock(return_value=None)

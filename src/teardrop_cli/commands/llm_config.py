@@ -175,9 +175,7 @@ def set_config(
     if byok_key == "-":
         resolved_key = sys.stdin.read().strip()
     elif byok_key is not None:
-        print_warning(
-            "API key visible in shell history. Prefer: --byok-key - (read from stdin)"
-        )
+        print_warning("API key visible in shell history. Prefer: --byok-key - (read from stdin)")
         resolved_key = byok_key
 
     if resolved_key and api_base and not api_base.startswith("https://"):
@@ -253,9 +251,7 @@ def set_config(
     if data.get("api_base"):
         summary_rows.append(["Self-Hosted URL", data["api_base"]])
     if data.get("has_api_key"):
-        key_display = (
-            f"true ({_mask_api_key(resolved_key)})" if resolved_key else "true"
-        )
+        key_display = f"true ({_mask_api_key(resolved_key)})" if resolved_key else "true"
         summary_rows.append(["API Key Set", key_display])
     if data.get("is_byok"):
         summary_rows.append(["BYOK", "true"])
@@ -284,9 +280,7 @@ def delete(
     from teardrop_cli.formatting import confirm, print_error, print_success, spinner
 
     if not yes:
-        confirmed = confirm(
-            "Delete custom LLM config? This will revert to global defaults."
-        )
+        confirmed = confirm("Delete custom LLM config? This will revert to global defaults.")
         if not confirmed:
             raise typer.Abort()
 
@@ -350,7 +344,9 @@ def _byok_interactive(*, base_url: str | None) -> None:
         print_error(f"Unknown provider: {raw!r}")
         raise typer.Exit(1) from None
     if provider not in _SUPPORTED_PROVIDERS:
-        print_error(f"Unsupported provider: {provider!r}", hint=f"Supported: {', '.join(providers)}")
+        print_error(
+            f"Unsupported provider: {provider!r}", hint=f"Supported: {', '.join(providers)}"
+        )
         raise typer.Exit(1)
 
     # Model
@@ -359,9 +355,7 @@ def _byok_interactive(*, base_url: str | None) -> None:
 
     # Routing
     routings = ["default", "cost", "speed", "quality"]
-    routing = typer.prompt(
-        f"Routing tier ({'/'.join(routings)})", default="quality"
-    )
+    routing = typer.prompt(f"Routing tier ({'/'.join(routings)})", default="quality")
     if routing not in routings:
         print_error(f"Invalid routing: {routing!r}", hint=f"Choose: {', '.join(routings)}")
         raise typer.Exit(1)

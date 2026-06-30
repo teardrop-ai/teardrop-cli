@@ -24,9 +24,7 @@ class TestRun:
         assert result.exit_code == 2
         assert "Invalid --context" in result.output
 
-    def test_run_payment_required_error(
-        self, runner: CliRunner, patch_get_client, mock_client
-    ):
+    def test_run_payment_required_error(self, runner: CliRunner, patch_get_client, mock_client):
         from teardrop import PaymentRequiredError
 
         async def _fail(*a, **kw):
@@ -78,6 +76,7 @@ class TestSSEContract:
     def test_run_trusts_clean_prose(self, runner: CliRunner, patch_get_client, mock_client):
         async def _emit(*args, **kwargs):
             from teardrop_cli._fixtures import build_text_event
+
             yield build_text_event("Clean narrative text.")
 
         mock_client.run = _emit
@@ -90,14 +89,14 @@ class TestSSEContract:
             from unittest.mock import MagicMock
 
             from teardrop_cli._fixtures import build_text_event
-            
+
             yield build_text_event("Narrative start.")
-            
+
             ev = MagicMock()
             ev.type = "SURFACE_UPDATE"
             ev.data = {"components": [{"type": "chart"}]}
             yield ev
-            
+
             yield build_text_event(" Narrative end.")
 
         mock_client.run = _emit
@@ -228,7 +227,7 @@ class TestMultiPhaseRun:
         mock_client.run = _run
         result = runner.invoke(app, ["run", "hi"])
         assert result.exit_code == 0
-        # Rich Live updates can be tricky to assert on exactly when multiple 
+        # Rich Live updates can be tricky to assert on exactly when multiple
         # frames are involved. We verify the final text accumulation.
         assert "Thinking..." in result.output
         assert "Done." in result.output
@@ -253,7 +252,9 @@ class TestEmitUi:
         assert result.exit_code == 0, result.output
         assert captured.get("emit_ui") is False
 
-    def test_with_ui_flag_passes_emit_ui_true(self, runner: CliRunner, patch_get_client, mock_client):
+    def test_with_ui_flag_passes_emit_ui_true(
+        self, runner: CliRunner, patch_get_client, mock_client
+    ):
         """--with-ui flag passes emit_ui=True."""
         captured: dict = {}
 
@@ -269,7 +270,9 @@ class TestEmitUi:
         assert result.exit_code == 0, result.output
         assert captured.get("emit_ui") is True
 
-    def test_no_stream_default_emit_ui_false(self, runner: CliRunner, patch_get_client, mock_client):
+    def test_no_stream_default_emit_ui_false(
+        self, runner: CliRunner, patch_get_client, mock_client
+    ):
         """--no-stream default also passes emit_ui=False."""
         captured: dict = {}
 
@@ -305,7 +308,9 @@ class TestEmitUi:
 class TestApprovalErrorSurfacing:
     """Verify get_token_approvals batch RPC failure surfaces a warning."""
 
-    def test_approval_error_surfaces_warning(self, runner: CliRunner, patch_get_client, mock_client):
+    def test_approval_error_surfaces_warning(
+        self, runner: CliRunner, patch_get_client, mock_client
+    ):
         """TOOL_CALL_RESULT with error from get_token_approvals prints a warning."""
         from teardrop_cli._fixtures import (
             build_done_event,
@@ -402,7 +407,9 @@ class TestEstimateCost:
 
     def test_estimate_cost_with_exclude(self, runner: CliRunner, patch_get_client, mock_client):
         """--estimate-cost --exclude should still work and not call run()."""
-        result = runner.invoke(app, ["run", "hello", "--estimate-cost", "--exclude", "acme/weather"])
+        result = runner.invoke(
+            app, ["run", "hello", "--estimate-cost", "--exclude", "acme/weather"]
+        )
         assert result.exit_code == 0, result.output
         assert "Estimated total" in result.output
 

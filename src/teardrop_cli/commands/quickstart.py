@@ -70,9 +70,7 @@ def _auth_menu(base_url: str | None) -> None:
 
     if not has_account:
         console.print("\n[bold]Create your account:[/bold]")
-        console.print(
-            "  [cyan]1[/cyan]  Ethereum wallet — fastest, no email needed [recommended]"
-        )
+        console.print("  [cyan]1[/cyan]  Ethereum wallet — fastest, no email needed [recommended]")
         console.print("  [cyan]2[/cyan]  Email + password")
         choice = typer.prompt("Choice", default="1")
 
@@ -133,9 +131,7 @@ def _sample_run_branch(base_url: str | None) -> None:
         "Prompt", default="What is the current ETH gas price?", show_default=True
     )
     console.print()
-    if typer.confirm(
-        "Configure a BYOK LLM key first? (skip if you have credits)", default=False
-    ):
+    if typer.confirm("Configure a BYOK LLM key first? (skip if you have credits)", default=False):
         from teardrop_cli.commands.llm_config import _byok_interactive
 
         _byok_interactive(base_url=base_url)
@@ -162,6 +158,5 @@ def _marketplace_browse_branch(base_url: str | None) -> None:
 
     list_cmd(base_url=base_url)
     console.print(
-        "\n[dim]Subscribe to a tool:[/dim]\n"
-        "  [bold]teardrop marketplace subscribe <name>[/bold]\n"
+        "\n[dim]Subscribe to a tool:[/dim]\n  [bold]teardrop marketplace subscribe <name>[/bold]\n"
     )

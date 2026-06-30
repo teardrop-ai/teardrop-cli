@@ -58,9 +58,7 @@ class TestSubscriptionCycle:
             )
 
         # Subscribe (--yes skips confirmation prompt)
-        sub_result = live_runner.invoke(
-            app, ["marketplace", "subscribe", test_tool, "--yes"]
-        )
+        sub_result = live_runner.invoke(app, ["marketplace", "subscribe", test_tool, "--yes"])
         assert sub_result.exit_code == 0, sub_result.output
 
         # Verify it appears in the subscription list
@@ -73,17 +71,13 @@ class TestSubscriptionCycle:
         )
 
         # Unsubscribe
-        unsub_result = live_runner.invoke(
-            app, ["marketplace", "unsubscribe", test_tool]
-        )
+        unsub_result = live_runner.invoke(app, ["marketplace", "unsubscribe", test_tool])
         assert unsub_result.exit_code == 0, unsub_result.output
 
         # Verify it is gone
         subs_after = live_runner.invoke(app, ["marketplace", "subscriptions", "--json"])
         assert subs_after.exit_code == 0, subs_after.output
-        names_after = [
-            s.get("qualified_tool_name", "") for s in json.loads(subs_after.output)
-        ]
+        names_after = [s.get("qualified_tool_name", "") for s in json.loads(subs_after.output)]
         assert test_tool not in names_after, (
             f"Tool {test_tool!r} still present after unsubscribe: {names_after}"
         )

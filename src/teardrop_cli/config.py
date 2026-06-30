@@ -168,10 +168,7 @@ def _is_secure_keyring() -> bool:
         return False
 
     # For chained backends, check all layers.
-    return all(
-        not _is_insecure_backend(sub)
-        for sub in getattr(backend, "backends", [])
-    )
+    return all(not _is_insecure_backend(sub) for sub in getattr(backend, "backends", []))
 
 
 def store_siwe_key(private_key: str, address: str) -> None:
@@ -185,8 +182,7 @@ def store_siwe_key(private_key: str, address: str) -> None:
 
     if not _is_secure_keyring():
         print_warning(
-            "The active keyring backend is not encrypted. "
-            "SIWE private key was NOT saved."
+            "The active keyring backend is not encrypted. SIWE private key was NOT saved."
         )
         return
     import keyring
@@ -266,9 +262,7 @@ def store_client_credentials(client_id: str, client_secret: str) -> None:
 
         with contextlib.suppress(Exception):
             keyring.set_password(_KEYRING_SERVICE, _KEYRING_CLIENT_ID_KEY, client_id)
-            keyring.set_password(
-                _KEYRING_SERVICE, _KEYRING_CLIENT_SECRET_KEY, client_secret
-            )
+            keyring.set_password(_KEYRING_SERVICE, _KEYRING_CLIENT_SECRET_KEY, client_secret)
     cfg = load_config()
     cfg["client_id"] = client_id
     save_config(cfg)

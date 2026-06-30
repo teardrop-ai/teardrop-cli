@@ -106,11 +106,7 @@ class TestTokenRefresh:
         from teardrop_cli import config
 
         cfg = config.load_config()
-        cfg["access_token"] = (
-            "eyJhbGciOiJIUzI1NiJ9"
-            ".eyJleHAiOjEwMDAwMDAwMH0"
-            ".stale_signature"
-        )
+        cfg["access_token"] = "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjEwMDAwMDAwMH0.stale_signature"
         config.save_config(cfg)
 
         # Any authed command should still succeed via the refresh token
@@ -121,9 +117,7 @@ class TestTokenRefresh:
 
 
 class TestCredentialResolutionPriority:
-    def test_api_key_env_overrides_config(
-        self, blank_runner, live_creds, monkeypatch
-    ) -> None:
+    def test_api_key_env_overrides_config(self, blank_runner, live_creds, monkeypatch) -> None:
         """TEARDROP_API_KEY env var (priority 1) takes precedence over config file."""
         if not live_creds.get("token"):
             pytest.skip("Requires TEARDROP_E2E_TOKEN to test env-var override")

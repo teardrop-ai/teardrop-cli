@@ -136,9 +136,7 @@ def app(
     if estimate_cost:
         from teardrop_cli.commands.run import _estimate_cost
 
-        _estimate_cost(
-            message, context=context, tool_policy=tool_policy, base_url=base_url
-        )
+        _estimate_cost(message, context=context, tool_policy=tool_policy, base_url=base_url)
         return
 
     # --- Capture the server-returned thread id ---

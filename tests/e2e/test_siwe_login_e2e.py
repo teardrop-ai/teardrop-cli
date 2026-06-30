@@ -23,9 +23,7 @@ class TestSiweLogin:
         """``auth login --siwe`` with a valid private key stores a JWT and exits 0."""
         private_key = os.environ.get("TEARDROP_E2E_WALLET_PRIVATE_KEY")
         if not private_key:
-            pytest.skip(
-                "Set TEARDROP_E2E_WALLET_PRIVATE_KEY=0x<key> to run the live SIWE test"
-            )
+            pytest.skip("Set TEARDROP_E2E_WALLET_PRIVATE_KEY=0x<key> to run the live SIWE test")
 
         monkeypatch.setenv("TEARDROP_SIWE_PRIVATE_KEY", private_key)
 
@@ -39,17 +37,13 @@ class TestSiweLogin:
         token = cfg.get("access_token")
         assert token, "Expected access_token in config after SIWE login"
         # JWT format: three base64url segments separated by dots
-        assert token.count(".") >= 2, (
-            f"Stored token does not look like a JWT: {token!r}"
-        )
+        assert token.count(".") >= 2, f"Stored token does not look like a JWT: {token!r}"
 
     def test_siwe_status_after_login(self, blank_runner, monkeypatch) -> None:
         """After SIWE login, ``auth status`` succeeds and returns the wallet address."""
         private_key = os.environ.get("TEARDROP_E2E_WALLET_PRIVATE_KEY")
         if not private_key:
-            pytest.skip(
-                "Set TEARDROP_E2E_WALLET_PRIVATE_KEY=0x<key> to run the live SIWE test"
-            )
+            pytest.skip("Set TEARDROP_E2E_WALLET_PRIVATE_KEY=0x<key> to run the live SIWE test")
 
         monkeypatch.setenv("TEARDROP_SIWE_PRIVATE_KEY", private_key)
 

@@ -36,9 +36,7 @@ def _fmt_usdc(atomic: int | None) -> str:
 async def _resolve_tool_id(client, name: str) -> str | None:
     tools = await client.list_tools()
     for t in tools:
-        if getattr(t, "name", None) == name or (
-            isinstance(t, dict) and t.get("name") == name
-        ):
+        if getattr(t, "name", None) == name or (isinstance(t, dict) and t.get("name") == name):
             return getattr(t, "id", None) or t.get("id")
     return None
 
@@ -82,10 +80,8 @@ def list_tools(
     for t in items:
         active = "✓" if t.get("is_active") else "✗"
         marketplace = "✓" if t.get("publish_as_mcp") else "✗"
-        price = (
-            _fmt_usdc(t.get("base_price_usdc")) if t.get("publish_as_mcp") else "—"
-        )
-        webhook = (t.get("webhook_url") or "")
+        price = _fmt_usdc(t.get("base_price_usdc")) if t.get("publish_as_mcp") else "—"
+        webhook = t.get("webhook_url") or ""
         if len(webhook) > 50:
             webhook = webhook[:47] + "…"
         rows.append([t.get("name", "—"), active, marketplace, price, webhook])
@@ -173,9 +169,7 @@ def init(
             help="Include marketplace fields (publish_as_mcp, base_price_usdc, etc.).",
         ),
     ] = False,
-    force: Annotated[
-        bool, typer.Option("--force", "-f", help="Overwrite existing file.")
-    ] = False,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Overwrite existing file.")] = False,
 ) -> None:
     """Scaffold a starter ``tool.json`` ready for ``teardrop tools publish``."""
     from teardrop_cli._templates import render_tool_template
@@ -274,9 +268,7 @@ def publish(
         with spinner("Publishing tool…"):
             tool = asyncio.run(_do())
     except ConflictError:
-        print_error(
-            f"Tool name {name!r} already exists.", hint="Choose a different name."
-        )
+        print_error(f"Tool name {name!r} already exists.", hint="Choose a different name.")
         raise typer.Exit(1) from None
 
     info = tool.model_dump() if hasattr(tool, "model_dump") else dict(tool)
@@ -296,7 +288,9 @@ def _publish_wizard() -> dict[str, Any]:
     name = typer.prompt("Tool name (lowercase, a-z0-9_)")
     description = typer.prompt("Description")
     webhook_url = typer.prompt("Webhook URL (HTTPS)")
-    auth_header_name = typer.prompt("Webhook auth header name [optional]", default="", show_default=False)
+    auth_header_name = typer.prompt(
+        "Webhook auth header name [optional]", default="", show_default=False
+    )
     auth_header_value = ""
     if auth_header_name:
         auth_header_value = typer.prompt("Webhook auth header value", hide_input=True)
@@ -406,9 +400,7 @@ def update(
         payload["is_active"] = active
     if output_schema_file is not None:
         try:
-            payload["output_schema"] = json.loads(
-                output_schema_file.read_text(encoding="utf-8")
-            )
+            payload["output_schema"] = json.loads(output_schema_file.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             print_error(f"Invalid JSON in {output_schema_file}: {exc}")
             raise typer.Exit(1) from None
@@ -478,9 +470,7 @@ def pause(
         print_error(f"Tool {name!r} not found.")
         raise typer.Exit(1)
 
-    print_success(
-        f"{name} paused. Run `teardrop tools update {name} --active` to re-enable."
-    )
+    print_success(f"{name} paused. Run `teardrop tools update {name} --active` to re-enable.")
 
 
 # ---------------------------------------------------------------------------
@@ -565,9 +555,7 @@ def probe(
         raise typer.Exit(1)
 
     if bool(auth_header_name) != bool(auth_header_value):
-        print_error(
-            "Both --auth-header-name and --auth-header-value are required together."
-        )
+        print_error("Both --auth-header-name and --auth-header-value are required together.")
         raise typer.Exit(1)
 
     if tool_data and tool_data.get("has_auth") and not auth_header_name:
@@ -650,9 +638,7 @@ def probe(
         print_error(f"Webhook returned {status_code} in {latency_ms:.0f}ms.")
         raise typer.Exit(1)
     if status_code >= 400:
-        print_warning(
-            f"Webhook reachable but returned {status_code} in {latency_ms:.0f}ms."
-        )
+        print_warning(f"Webhook reachable but returned {status_code} in {latency_ms:.0f}ms.")
         return
 
     print_success(f"Webhook healthy: {status_code} in {latency_ms:.0f}ms.")
@@ -673,9 +659,7 @@ def delete(
     from teardrop_cli import config
     from teardrop_cli.formatting import confirm, print_error, print_success, spinner
 
-    if not yes and not confirm(
-        f"Delete tool {name!r}? Subscribers will lose access."
-    ):
+    if not yes and not confirm(f"Delete tool {name!r}? Subscribers will lose access."):
         raise typer.Abort()
 
     client = config.get_client(base_url)

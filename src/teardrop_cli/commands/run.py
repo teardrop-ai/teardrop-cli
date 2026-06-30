@@ -245,9 +245,7 @@ def _estimate_cost(
         [],
         ["Estimated total", f"[bold]${format_usdc(est.total_usdc)} USDC[/bold]"],
     ]
-    print_table(
-        [("Item", {"style": "bold cyan"}), "Value"], rows, title="Cost Estimate"
-    )
+    print_table([("Item", {"style": "bold cyan"}), "Value"], rows, title="Cost Estimate")
     console.print(f"[dim]{est.disclaimer}[/dim]")
 
 

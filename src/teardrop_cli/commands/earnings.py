@@ -94,9 +94,7 @@ def balance(
     ]
     if data.get("settlement_wallet"):
         rows.append(["Settlement wallet", data["settlement_wallet"]])
-    print_table(
-        [("Field", {"style": "bold cyan"}), "Value"], rows, title="Earnings Balance"
-    )
+    print_table([("Field", {"style": "bold cyan"}), "Value"], rows, title="Earnings Balance")
 
 
 # ---------------------------------------------------------------------------
@@ -232,9 +230,7 @@ def withdraw(
         print_json(result)
         return
 
-    print_success(
-        "Withdrawal initiated. Transaction may take 1–5 minutes on-chain."
-    )
+    print_success("Withdrawal initiated. Transaction may take 1–5 minutes on-chain.")
 
 
 async def _quick_balance(client) -> dict | None:

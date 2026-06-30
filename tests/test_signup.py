@@ -131,9 +131,7 @@ class TestSignup:
         assert "rate" in result.output.lower() or "429" in result.output
 
     def test_invalid_payload_422(self, runner: CliRunner):
-        client = _mock_httpx_post(
-            status_code=422, json_body={"detail": "password too weak"}
-        )
+        client = _mock_httpx_post(status_code=422, json_body={"detail": "password too weak"})
         with patch("httpx.AsyncClient", return_value=client):
             result = runner.invoke(
                 app,
@@ -215,23 +213,17 @@ class TestSiweKeyFile:
 
         # Stub auth + session storage
         monkeypatch.setattr("teardrop_cli.config.store_session", lambda **kw: None)
-        monkeypatch.setattr(
-            "teardrop_cli.config.extract_session_tokens", lambda c: ("acc", "ref")
-        )
+        monkeypatch.setattr("teardrop_cli.config.extract_session_tokens", lambda c: ("acc", "ref"))
 
         mock_client = MagicMock()
-        mock_client.get_siwe_nonce = AsyncMock(
-            return_value=MagicMock(nonce="abc123nonce456")
-        )
+        mock_client.get_siwe_nonce = AsyncMock(return_value=MagicMock(nonce="abc123nonce456"))
         mock_client.authenticate_siwe = AsyncMock(
             return_value=MagicMock(access_token="acc", refresh_token="ref")
         )
         mock_client.close = AsyncMock()
 
         with patch("teardrop.AsyncTeardropClient", return_value=mock_client):
-            result = runner.invoke(
-                app, ["auth", "login", "--siwe", "--key-file", str(key_path)]
-            )
+            result = runner.invoke(app, ["auth", "login", "--siwe", "--key-file", str(key_path)])
         assert result.exit_code == 0, result.output
         # The private key must NOT appear in the command output.
         assert priv_hex.lstrip("0x") not in result.output
@@ -260,9 +252,7 @@ class TestAuthErrorDifferentiation:
         # Some CLIs raise generic AuthenticationError on 404 — verify _handle_auth_error
         # surfaces a signup hint when the message looks like 'not found'.
         mock_client = MagicMock()
-        mock_client.get_me = AsyncMock(
-            side_effect=AuthenticationError("user not found (404)")
-        )
+        mock_client.get_me = AsyncMock(side_effect=AuthenticationError("user not found (404)"))
         mock_client.close = AsyncMock()
 
         with patch("teardrop.AsyncTeardropClient", return_value=mock_client):

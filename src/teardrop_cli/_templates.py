@@ -47,7 +47,5 @@ def render_tool_template(name: str, *, with_marketplace: bool = False) -> dict:
     data = {**_BASE_TEMPLATE, "name": name}
     if with_marketplace:
         data["publish_as_mcp"] = True
-        data["marketplace_description"] = (
-            "One-line marketplace pitch (max 200 characters)."
-        )
+        data["marketplace_description"] = "One-line marketplace pitch (max 200 characters)."
     return data

@@ -156,9 +156,7 @@ def _compute(
     tool_call_flat = max(0, round(tool_call_rate * tool_calls))
 
     # --- Per‑tool usage costs ---
-    tool_usage = sum(
-        t.get("price_usdc", 0) for t in usable_tools
-    )
+    tool_usage = sum(t.get("price_usdc", 0) for t in usable_tools)
     base_cost = pricing.get("base_cost_usdc", 0)
 
     total = model_in_cost + model_out_cost + tool_call_flat + tool_usage + base_cost

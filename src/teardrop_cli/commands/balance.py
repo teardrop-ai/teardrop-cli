@@ -105,9 +105,7 @@ def show(as_json: bool, base_url: str | None) -> None:
         ["Daily spend", _fmt_usdc(data.get("daily_spend_usdc"))],
         ["Account status", "paused" if data.get("is_paused") else "active"],
     ]
-    print_table(
-        [("Field", {"style": "bold cyan"}), "Value"], rows, title="Account Balance"
-    )
+    print_table([("Field", {"style": "bold cyan"}), "Value"], rows, title="Account Balance")
 
     if data.get("is_paused"):
         console.print(
@@ -185,6 +183,7 @@ def _credit_history(limit: int, as_json: bool, base_url: str | None) -> None:
 
     if not items:
         from teardrop_cli.formatting import data_console
+
         data_console.print("[dim]No credit history found.[/dim]")
         return
 

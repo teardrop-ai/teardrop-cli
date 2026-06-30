@@ -108,6 +108,4 @@ def list_cmd(
         return
 
     rows = [[k, v] for k, v in cfg.items()]
-    print_table(
-        [("Key", {"style": "bold cyan"}), "Value"], rows, title="~/.teardrop/config.toml"
-    )
+    print_table([("Key", {"style": "bold cyan"}), "Value"], rows, title="~/.teardrop/config.toml")
