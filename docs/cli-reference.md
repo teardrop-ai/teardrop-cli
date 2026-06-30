@@ -123,17 +123,18 @@ will start a fresh thread.
 
 ## Schedules
 
-Recurring interval-based runs:
+Recurring interval-based runs. Most commands accept `--json` to return raw structured payloads for pipeline automation:
 
 ```bash
 teardrop schedules create \
   --name hourly-briefing \
   --prompt "Summarize open incidents" \
-  --interval-seconds 3600
+  --interval-seconds 3600 \
+  --json
 
-teardrop schedules list
-teardrop schedules get <schedule-id>
-teardrop schedules update <schedule-id> --enabled false
+teardrop schedules list --json
+teardrop schedules get <schedule-id> --json
+teardrop schedules update <schedule-id> --enabled false --json
 teardrop schedules update <schedule-id> --clear-callback-url
 teardrop schedules runs <schedule-id> --limit 50 --json
 teardrop schedules delete <schedule-id>
@@ -150,24 +151,25 @@ Run history output includes: `Run ID`, `Status`, `Cost (USDC)`, `Error Message`,
 
 ## Event Triggers
 
-Reactive runs exposed as signed public webhook endpoints:
+Reactive runs exposed as signed public webhook endpoints. Commands support a `--json` option to output formatted shapes (with creation and rotation payloads securely exposing the one-time dispatch secret):
 
 ```bash
 teardrop event-triggers create \
   --name inbound-orders \
-  --prompt "Validate and process this order payload"
+  --prompt "Validate and process this order payload" \
+  --json
 
-teardrop event-triggers list
-teardrop event-triggers get <trigger-id>
-teardrop event-triggers update <trigger-id> --enabled false
+teardrop event-triggers list --json
+teardrop event-triggers get <trigger-id> --json
+teardrop event-triggers update <trigger-id> --enabled false --json
 teardrop event-triggers update <trigger-id> --callback-url https://example.com/hook
 teardrop event-triggers runs <trigger-id> --limit 50 --json
-teardrop event-triggers rotate-secret <trigger-id>
+teardrop event-triggers rotate-secret <trigger-id> --json
 teardrop event-triggers delete <trigger-id>
 teardrop event-triggers delete <trigger-id> --yes
 ```
 
-`create` and `rotate-secret` display the signing secret once. Store it immediately; subsequent `list` and `get` calls do not return the plaintext secret.
+`create` and `rotate-secret` display the signing secret once (both inside non-JSON stderr summaries and their corresponding use-once JSON attributes). Store it immediately; subsequent `list`, `get`, or `update` calls permanently exclude the plaintext secret.
 
 Non-JSON list output includes: `ID`, `Name`, `Enabled`, `Kind`, `Consecutive Failures`, `Last Run At`.
 
