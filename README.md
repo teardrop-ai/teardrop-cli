@@ -26,20 +26,26 @@ Requires Python ≥ 3.11.
 
 ## 60-Second Quickstart
 
-The wizard walks you through sign-in, BYOK LLM setup, and your first agent run or scaffolded tool:
+The wizard walks you through sign-in, optional BYOK LLM setup, and your first agent run or scaffolded tool:
 
 ```bash
 teardrop quickstart
 ```
 
+Quickstart keeps local tool scaffolding and public marketplace browsing available
+without sign-in. A saved session is verified when you choose an agent run; if it
+is stale, the wizard offers sign-in again before asking for a prompt or payment
+confirmation. Environment credentials must be updated or unset when they are
+rejected because they take precedence over interactive login.
+
 Prefer the manual path? Pick a sign-in method:
 
 ```bash
-# Wallet-first (no email needed) — generates a wallet on first run if you don't have one
-teardrop auth login --siwe --generate-wallet
-
 # Email + password
 teardrop auth signup --email you@example.com --org-name acme
+
+# Wallet-first (no email needed) — generates a wallet on first run if you don't have one
+teardrop auth login --siwe --generate-wallet
 
 # Already have an account
 teardrop auth login --email you@example.com
@@ -83,7 +89,7 @@ Scaffold a starter spec, edit it, and publish:
 ```bash
 teardrop tools init my_scraper       # writes ./tool.json
 $EDITOR tool.json                    # set webhook_url, schema, price
-teardrop tools probe my_scraper      # test webhook health before publishing
+teardrop tools probe --from-file tool.json  # test webhook health before publishing
 teardrop tools publish --from-file tool.json \
     --settlement-wallet 0xYourChecksumAddress
 ```
@@ -96,7 +102,7 @@ teardrop tools publish
 
 Tool name rules: `^[a-z][a-z0-9_]*$`, ≤ 64 chars. Prices are in atomic USDC (6 decimals): `5000` = **$0.005** per call. Settlement wallet is required once before your first payout.
 
-Test your webhook before publishing with `teardrop tools probe <tool-name>`. Optionally pass `--auth-header-name` and `--auth-header-value` if your webhook requires auth, or use `--method` and `--payload` to customize the probe request.
+Test a local webhook before publishing with `teardrop tools probe --from-file tool.json`; the spec's method and auth settings are used by default. After publishing, use `teardrop tools probe <tool-name>`. Pass `--auth-header-name` and `--auth-header-value` to override auth settings, or use `--method` and `--payload` to customize the probe request.
 
 Manage existing tools: `teardrop tools list | info | update | pause | delete | probe`. Full reference: [docs/cli-reference.md](docs/cli-reference.md#tool-management).
 
@@ -234,6 +240,12 @@ teardrop llm-config set --provider google --model gemini-3-flash --routing speed
 ```
 
 Pipe a key from stdin to keep it out of shell history: `--byok-key -`. See [docs/cli-reference.md](docs/cli-reference.md#llm-configuration) for advanced tuning, BYOK details, and benchmarks.
+
+### LLM credit model
+
+Non-BYOK organizations use Teardrop's shared provider keys. Platform credits or x402 cover the model token costs and Teardrop platform fee. BYOK organizations pay their model provider directly through their own encrypted key, but still need platform credits or x402 for the Teardrop orchestration fee. BYOK uses the configured model and does not use pooled smart routing.
+
+New email-authenticated organizations may receive optional promotional credit after verifying their email when the program is enabled. Eligibility and availability are server-configured; SIWE users and marketplace author tools are excluded. A real top-up removes promotional restrictions.
 
 ---
 

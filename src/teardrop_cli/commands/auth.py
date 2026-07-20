@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -319,7 +320,11 @@ def login(
     print_success(f"Logged in as [bold]{email}[/bold]{org_label}")
 
 
-def interactive_reauthenticate(base_url: str | None = None) -> bool:
+def interactive_reauthenticate(
+    base_url: str | None = None,
+    *,
+    warning_message: str = "Your session expired during this command.",
+) -> bool:
     """Prompt the user to sign in again after an expired session.
 
     Returns ``True`` when authentication completed and the caller should retry,
@@ -328,7 +333,7 @@ def interactive_reauthenticate(base_url: str | None = None) -> bool:
     from teardrop_cli import config
     from teardrop_cli.formatting import console, print_warning
 
-    print_warning("Your session expired during this command.")
+    print_warning(warning_message)
     console.print("\n[bold]Sign in to continue:[/bold]")
     console.print("  [cyan]0[/cyan]  Cancel")
     console.print("  [cyan]1[/cyan]  Email + password [recommended]")
@@ -375,7 +380,7 @@ def _resolve_siwe_private_key(
         try:
             from eth_account import Account
         except ImportError:
-            print_error("eth-account is required.", hint="pip install 'teardrop-cli[siwe]'")
+            print_error("eth-account is required.", hint="pip install teardrop-cli")
             raise typer.Exit(1) from None
         acct = Account.create()
         from rich.panel import Panel
@@ -406,16 +411,21 @@ def _resolve_siwe_private_key(
     if env_key := os.environ.get("TEARDROP_SIWE_PRIVATE_KEY"):
         return env_key, False
 
-    print_error(
-        "No Ethereum private key found.",
-        hint=(
-            "Provide one via:\n"
-            "  • TEARDROP_SIWE_PRIVATE_KEY env var\n"
-            "  • --key-file PATH\n"
-            "  • --generate-wallet (creates a new wallet)"
-        ),
+    hint = (
+        "Provide one via:\n"
+        "  • TEARDROP_SIWE_PRIVATE_KEY env var\n"
+        "  • --key-file PATH\n"
+        "  • --generate-wallet (creates a new wallet)"
     )
-    raise typer.Exit(1)
+    if not sys.stdin.isatty():
+        print_error("No Ethereum private key found.", hint=hint)
+        raise typer.Exit(1)
+
+    private_key = typer.prompt("Ethereum private key", hide_input=True).strip()
+    if not private_key:
+        print_error("No Ethereum private key provided.", hint=hint)
+        raise typer.Exit(1)
+    return private_key, False
 
 
 async def _siwe_auth_async(

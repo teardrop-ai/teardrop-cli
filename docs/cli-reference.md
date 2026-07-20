@@ -39,7 +39,7 @@ teardrop auth login --client-id <id> --client-secret <secret>
 teardrop auth login --token <jwt>
 
 # Sign-In With Ethereum (EIP-4361) — pick one source for the key:
-teardrop auth login --siwe                              # interactive hidden prompt
+teardrop auth login --siwe                              # hidden prompt when no other source is supplied
 teardrop auth login --siwe --key-file ./wallet.key      # read once, never persisted
 teardrop auth login --siwe --generate-wallet            # creates a fresh wallet
 TEARDROP_SIWE_PRIVATE_KEY=0x... teardrop auth login --siwe   # CI / non-interactive
@@ -72,8 +72,9 @@ teardrop auth logout               # revoke refresh token + clear stored credent
 | 1 | `TEARDROP_API_KEY` env var (static JWT) |
 | 2 | `TEARDROP_EMAIL` + `TEARDROP_SECRET` env vars |
 | 3 | `TEARDROP_CLIENT_ID` + `TEARDROP_CLIENT_SECRET` env vars |
-| 4 | `access_token` in `~/.teardrop/config.toml` |
-| 5 | System keyring (email + secret, or client credentials) |
+| 4 | System keyring (email + secret, or client credentials) |
+| 5 | `access_token` in `~/.teardrop/config.toml` |
+| 6 | Legacy `auth.token` in `~/.teardrop/config.toml` |
 
 ---
 
@@ -195,6 +196,12 @@ The CLI does not support direct top-ups. To add credits or manage your billing m
 
 If you run out of credits during an agent run, the agent will pause and provide this link.
 
+### LLM credit model
+
+Non-BYOK organizations use Teardrop's shared provider keys and need credits or x402 for model token costs plus the platform fee. BYOK organizations pay their provider directly through their encrypted key, but still need credits or x402 for the Teardrop orchestration fee. BYOK uses the configured model; pooled smart routing is disabled.
+
+Optional promotional credit may be granted after successful email verification when the server-side program is enabled. It is not available to SIWE users or marketplace author tools, and a real top-up removes promotional restrictions. The CLI does not assume eligibility or a fixed promotional amount.
+
 ---
 
 ## Tool Management
@@ -266,7 +273,13 @@ teardrop tools delete get_weather --yes              # skip confirmation
 
 ### Test webhook health
 
-Before publishing or after updating a webhook URL, test it:
+Before publishing, test a local spec without authentication or an API lookup:
+
+```bash
+teardrop tools probe --from-file tool.json
+```
+
+After publishing or updating a webhook URL, test the registered tool:
 
 ```bash
 teardrop tools probe get_weather                    # test default POST request
@@ -288,6 +301,8 @@ Customize the probe request:
 teardrop tools probe get_weather --method GET
 teardrop tools probe get_weather --payload '{"test": "data"}'
 ```
+
+For `--from-file`, the spec's `webhook_method`, `auth_header_name`, and `auth_header_value` are used by default. Explicit probe flags override them.
 
 Exit code: 0 on success (2xx–3xx), 1 on timeout/5xx/connection error. Warning (exit 0) on 4xx responses (e.g., auth failures).
 
@@ -354,7 +369,7 @@ teardrop llm-config set \
   --timeout-seconds 60
 ```
 
-**Providers:** `openrouter`, `google`, `anthropic`
+**Providers:** `openrouter`, `google`, `anthropic`, `openai`
 **Routing:** `default` · `cost` · `speed` · `quality`
 **Validation:** temperature 0.0–2.0 · max tokens 1–200,000 · timeout ≥ 1 s
 
@@ -374,6 +389,8 @@ Get-Content "$key_file" | teardrop llm-config set `
 # Remove BYOK key
 teardrop llm-config set --provider anthropic --model claude-sonnet-4-6 --clear-key
 ```
+
+BYOK keys are encrypted by the platform and used only for the configured provider/model. Teardrop still charges the orchestration fee through credits or x402; it does not charge Teardrop for the provider's model usage.
 
 ---
 

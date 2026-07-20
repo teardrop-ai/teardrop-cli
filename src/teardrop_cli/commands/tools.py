@@ -480,11 +480,14 @@ def pause(
 
 @app.command()
 def probe(
-    name: Annotated[str, typer.Argument(help="Tool name.")],
+    name: Annotated[
+        str | None,
+        typer.Argument(help="Published tool name. Omit when using --from-file."),
+    ] = None,
     method: Annotated[
-        str,
+        str | None,
         typer.Option("--method", help="HTTP method for webhook probe."),
-    ] = "POST",
+    ] = None,
     payload: Annotated[
         str,
         typer.Option(
@@ -515,10 +518,22 @@ def probe(
             hide_input=True,
         ),
     ] = None,
+    from_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--from-file",
+            help="Probe the webhook described by a local tool JSON spec.",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
     base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
 ) -> None:
-    """Probe a tool webhook and report status code and latency."""
+    """Probe a published tool or local tool JSON spec webhook."""
+    from teardrop import CreateOrgToolRequest
+
     from teardrop_cli import config
     from teardrop_cli.formatting import (
         print_error,
@@ -528,41 +543,80 @@ def probe(
         spinner,
     )
 
-    client = config.get_client(base_url)
+    if (name is None) == (from_file is None):
+        print_error("Provide exactly one tool source: a tool name or --from-file PATH.")
+        raise typer.Exit(1)
 
-    async def _do() -> tuple[str | None, dict[str, Any] | None]:
+    tool_data: dict[str, Any] | None = None
+    if from_file is not None:
         try:
-            tool_id = await _resolve_tool_id(client, name)
-            if tool_id is None:
-                return None, None
+            raw_data = json.loads(from_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            print_error(f"Invalid JSON in {from_file}: {exc}")
+            raise typer.Exit(1) from None
 
-            tool = await client.get_tool(tool_id)
-            data = tool.model_dump() if hasattr(tool, "model_dump") else dict(tool)
-            webhook_url = data.get("webhook_url")
-            return webhook_url, data
-        finally:
-            await client.close()
+        if not isinstance(raw_data, dict):
+            print_error(f"Tool spec in {from_file} must be a JSON object.")
+            raise typer.Exit(1)
 
-    with spinner(f"Resolving webhook for {name}…"):
-        webhook_url, tool_data = asyncio.run(_do())
+        try:
+            CreateOrgToolRequest(**raw_data)
+        except Exception as exc:
+            print_error(f"Validation error in {from_file}: {exc}")
+            raise typer.Exit(1) from None
+
+        tool_data = raw_data
+        webhook_url = tool_data.get("webhook_url")
+        probe_name = str(tool_data.get("name") or from_file.stem)
+    else:
+        client = config.get_client(base_url)
+
+        async def _do() -> tuple[str | None, dict[str, Any] | None]:
+            try:
+                tool_id = await _resolve_tool_id(client, name)
+                if tool_id is None:
+                    return None, None
+
+                tool = await client.get_tool(tool_id)
+                data = tool.model_dump() if hasattr(tool, "model_dump") else dict(tool)
+                return data.get("webhook_url"), data
+            finally:
+                await client.close()
+
+        with spinner(f"Resolving webhook for {name}…"):
+            webhook_url, tool_data = asyncio.run(_do())
+        probe_name = name
 
     if webhook_url is None:
-        print_error(f"Tool {name!r} not found.")
+        print_error(f"Tool {probe_name!r} not found.")
         raise typer.Exit(1)
 
     if not webhook_url:
-        print_error(f"Tool {name!r} has no webhook URL configured.")
+        print_error(f"Tool {probe_name!r} has no webhook URL configured.")
         raise typer.Exit(1)
 
     if bool(auth_header_name) != bool(auth_header_value):
         print_error("Both --auth-header-name and --auth-header-value are required together.")
         raise typer.Exit(1)
 
+    configured_auth_name = tool_data.get("auth_header_name") if from_file else None
+    configured_auth_value = tool_data.get("auth_header_value") if from_file else None
+    if from_file and bool(configured_auth_name) != bool(configured_auth_value):
+        print_error("Local tool spec must include both auth_header_name and auth_header_value.")
+        raise typer.Exit(1)
+
+    if auth_header_name is None and auth_header_value is None:
+        auth_header_name = configured_auth_name
+        auth_header_value = configured_auth_value
+
     if tool_data and tool_data.get("has_auth") and not auth_header_name:
         print_warning(
             "This tool appears to use webhook auth. Pass --auth-header-name and --auth-header-value to avoid false failures."
         )
 
+    configured_method = tool_data.get("webhook_method") if from_file else None
+    if method is None:
+        method = configured_method or "POST"
     method = method.strip().upper()
     if not method:
         print_error("--method cannot be empty.")
@@ -613,7 +667,7 @@ def probe(
         status_code, latency_ms, error = asyncio.run(_probe())
 
     payload = {
-        "tool": name,
+        "tool": probe_name,
         "webhook_url": webhook_url,
         "method": method,
         "request_payload": parsed_payload,

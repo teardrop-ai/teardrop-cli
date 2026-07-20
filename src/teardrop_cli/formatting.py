@@ -82,9 +82,10 @@ async def handle_token_expiry(
     if not isinstance(exc, AuthenticationError):
         return "none"
 
-    # Check if the error is specifically about expiration
+    # Accept both expiry wording and SDKs that expose a plain unauthorized 401.
     msg = str(exc).lower()
-    if "expire" not in msg:
+    status_code = getattr(exc, "status_code", None)
+    if "expire" not in msg and status_code not in {401, "401"}:
         return "none"
 
     from teardrop_cli import config

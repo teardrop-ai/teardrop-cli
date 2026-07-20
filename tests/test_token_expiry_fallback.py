@@ -80,6 +80,30 @@ async def test_handle_token_expiry_ignore_generic_auth_error():
 
 
 @pytest.mark.asyncio
+async def test_handle_unauthorized_status_as_expired_session():
+    from teardrop import AuthenticationError
+
+    exc = AuthenticationError("Unauthorized")
+    exc.status_code = 401
+
+    with (
+        patch("teardrop_cli.config.detect_credential_source") as mock_source,
+        patch("teardrop_cli.config.get_siwe_key", return_value=None),
+        patch("teardrop_cli.formatting.print_warning") as mock_warn,
+        patch("teardrop_cli.formatting.print_error") as mock_err,
+    ):
+        mock_source.return_value = "config:token"
+
+        action = await handle_token_expiry(exc, allow_prompt_login=True)
+
+        assert action == "prompt_login"
+        mock_err.assert_not_called()
+        assert any(
+            "Stored session has expired" in call.args[0] for call in mock_warn.call_args_list
+        )
+
+
+@pytest.mark.asyncio
 async def test_handle_token_expiry_retry_on_siwe_key():
     """When no email is available but a SIWE key is stored in keyring,
     handle_token_expiry should re-auth via _siwe_auth_async and return retry."""

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "teardrop-cli"
-version = "0.3.1"
+version = "0.3.2"
 description = "Command-line interface for the Teardrop AI agent platform"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "teardrop-sdk>=0.2.1",
+    "teardrop-sdk>=0.3.0",
     "typer>=0.12",
     "rich>=13.0",
     "platformdirs>=4.0",

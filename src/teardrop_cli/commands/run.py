@@ -216,7 +216,7 @@ def _estimate_cost(
     context: dict | None = None,
     tool_policy=None,
     base_url: str | None = None,
-) -> None:
+) -> bool:
     """Show an estimated cost based on current pricing and config — no inference."""
     from teardrop_cli.formatting import console, print_table
     from teardrop_cli.pricing import estimate_run_cost
@@ -227,7 +227,7 @@ def _estimate_cost(
         )
     except Exception as exc:  # noqa: BLE001
         _handle_run_error(exc)
-        return
+        return False
 
     from teardrop import format_usdc
 
@@ -247,6 +247,7 @@ def _estimate_cost(
     ]
     print_table([("Item", {"style": "bold cyan"}), "Value"], rows, title="Cost Estimate")
     console.print(f"[dim]{est.disclaimer}[/dim]")
+    return True
 
 
 async def _stream(
@@ -341,23 +342,26 @@ async def _collect(
 
 
 def _handle_run_error(exc: BaseException) -> None:
+    from teardrop import AuthenticationError, PaymentRequiredError, RateLimitError
+
     from teardrop_cli.formatting import print_error
 
     name = type(exc).__name__
     msg = str(exc)
+    status_code = getattr(exc, "status_code", None)
 
-    if name == "PaymentRequiredError" or "402" in msg:
+    if isinstance(exc, PaymentRequiredError) or status_code == 402:
         print_error(
             "Insufficient credit.",
-            hint="Topup at: https://teardrop.dev/billing",
+            hint="Check [bold]teardrop balance[/bold]. Add funds at: https://teardrop.dev/billing",
         )
         return
-    if name == "RateLimitError" or "429" in msg:
+    if isinstance(exc, RateLimitError) or status_code == 429:
         retry = getattr(exc, "retry_after", None)
         suffix = f" (retry after {retry}s)" if retry else ""
         print_error(f"Rate limit exceeded{suffix}.")
         return
-    if name == "AuthenticationError" or "401" in msg:
+    if isinstance(exc, AuthenticationError) or status_code == 401:
         print_error(
             "Not authenticated.",
             hint="Run `teardrop auth login` to sign in.",

@@ -13,11 +13,7 @@ from teardrop_cli.cli import app
 
 @pytest.fixture(autouse=True)
 def mock_quickstart_auth(monkeypatch):
-    """By default, make get_client return a mock so credential validation passes.
-
-    Only still needed for the sample-run branch path. Tests that set
-    TEARDROP_API_KEY no longer call get_client during quickstart itself.
-    """
+    """By default, make get_client return a verified mock for sample runs."""
     from teardrop_cli._fixtures import make_jwt_payload
 
     mock_client = MagicMock()
@@ -37,8 +33,8 @@ class TestQuickstartCredCheck:
         # No "Use them?" prompt; just source line and main menu. Pick "0" to exit.
         result = runner.invoke(app, ["quickstart"], input="0\n")
         assert result.exit_code == 0, result.output
-        assert "existing credentials" in result.output.lower()
-        assert "stored credentials found locally" in result.output.lower()
+        assert "saved session found locally" in result.output.lower()
+        assert "checked when you choose an authenticated action" in result.output.lower()
 
     def test_existing_creds_shows_source_label(self, runner: CliRunner, monkeypatch):
         """When TEARDROP_API_KEY is set, the source label is displayed."""
@@ -70,20 +66,17 @@ class TestQuickstartCredCheck:
 
         result = runner.invoke(app, ["quickstart"], input="0\n")
         assert result.exit_code == 0, result.output
-        assert "existing credentials" in result.output.lower()
+        assert "saved session found locally" in result.output.lower()
 
-    def test_stale_token_not_validated(self, runner: CliRunner, monkeypatch):
-        """Quickstart does NOT validate token expiry — it trusts stored creds.
-        An expired token surfaces later via the chosen branch's error handler."""
+    def test_saved_token_is_not_validated_for_local_exploration(
+        self, runner: CliRunner, monkeypatch
+    ):
+        """Local exploration does not require a network validation call."""
         monkeypatch.setenv("TEARDROP_API_KEY", "fake-jwt")
 
-        # No need for a failing client — quickstart shouldn't call get_client at all.
         result = runner.invoke(app, ["quickstart"], input="0\n")
         assert result.exit_code == 0, result.output
-        # Should see creds message but NO expired/re-authenticating warnings.
-        assert "existing credentials" in result.output.lower()
-        assert "expired" not in result.output.lower()
-        assert "re-authenticating" not in result.output.lower()
+        assert "verifying saved credentials" not in result.output.lower()
 
 
 class TestQuickstartScaffoldBranch:
@@ -113,15 +106,16 @@ class TestQuickstartSampleRunBranch:
 
         run_called: dict = {}
 
-        async def _fake_stream(client, message, thread, context):
+        async def _fake_stream(client, message, thread, context, **kwargs):
             run_called["message"] = message
 
         from teardrop_cli.commands import run as run_mod
 
         monkeypatch.setattr(run_mod, "_stream", _fake_stream)
+        monkeypatch.setattr(run_mod, "_estimate_cost", lambda *args, **kwargs: True)
 
-        # choice 2 (run); prompt text; skip BYOK → n
-        result = runner.invoke(app, ["quickstart"], input="2\nhello there\nn\n")
+        # choice 2 (run); prompt text; skip BYOK; skip estimate; confirm run
+        result = runner.invoke(app, ["quickstart"], input="2\nhello there\nn\nn\ny\n")
         assert result.exit_code == 0, result.output
         assert "message" in run_called
         assert run_called["message"] == "hello there"
@@ -131,14 +125,15 @@ class TestQuickstartSampleRunBranch:
         """A run failure prints the error and skips next-steps — wizard exits 0."""
         monkeypatch.setenv("TEARDROP_API_KEY", "fake-jwt")
 
-        async def _failing_stream(client, message, thread, context):
+        async def _failing_stream(client, message, thread, context, **kwargs):
             raise RuntimeError("network down")
 
         from teardrop_cli.commands import run as run_mod
 
         monkeypatch.setattr(run_mod, "_stream", _failing_stream)
+        monkeypatch.setattr(run_mod, "_estimate_cost", lambda *args, **kwargs: True)
 
-        result = runner.invoke(app, ["quickstart"], input="2\nping\nn\n")
+        result = runner.invoke(app, ["quickstart"], input="2\nping\nn\nn\ny\n")
         # _handle_run_error prints the error but doesn't raise; wizard finishes cleanly
         assert result.exit_code == 0, result.output
         # "continue exploring" is the next-steps text that should be suppressed
@@ -187,8 +182,8 @@ class TestQuickstartAuthMenu:
         ):
             monkeypatch.delenv(var, raising=False)
 
-        # no account (Enter=N default); choose email signup (2); exit (4)
-        result = runner.invoke(app, ["quickstart"], input="\n2\n4\n")
+        # choose sample run; no account (Enter=N default); choose default email signup
+        result = runner.invoke(app, ["quickstart"], input="2\n\n\n")
         assert result.exit_code == 0, result.output
         assert "kwargs" in called
 
@@ -212,7 +207,85 @@ class TestQuickstartAuthMenu:
         ):
             monkeypatch.delenv(var, raising=False)
 
-        # has account (y); choose email login (2, no longer the default); exit (4)
-        result = runner.invoke(app, ["quickstart"], input="y\n2\n4\n")
+        # choose sample run; has account (y); choose email login (2)
+        result = runner.invoke(app, ["quickstart"], input="2\ny\n2\n")
         assert result.exit_code == 0, result.output
         assert "kwargs" in called
+
+
+class TestQuickstartAuthRecovery:
+    def test_sample_run_recovers_stale_saved_session(self, runner: CliRunner, monkeypatch):
+        from teardrop import AuthenticationError
+
+        from teardrop_cli._fixtures import make_jwt_payload
+        from teardrop_cli.commands import auth as auth_mod
+        from teardrop_cli.commands import run as run_mod
+
+        for variable in (
+            "TEARDROP_API_KEY",
+            "TEARDROP_TOKEN",
+            "TEARDROP_EMAIL",
+            "TEARDROP_SECRET",
+            "TEARDROP_CLIENT_ID",
+            "TEARDROP_CLIENT_SECRET",
+        ):
+            monkeypatch.delenv(variable, raising=False)
+        config.store_token("stale-token")
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(
+            side_effect=[AuthenticationError("Token expired"), make_jwt_payload()]
+        )
+        mock_client.close = AsyncMock()
+        reauth_called = {}
+        monkeypatch.setattr(config, "get_client", lambda base_url=None: mock_client)
+        monkeypatch.setattr(
+            auth_mod,
+            "interactive_reauthenticate",
+            lambda base_url=None, warning_message=None: (
+                reauth_called.update(warning=warning_message)
+                or config.store_token("fresh-token")
+                or True
+            ),
+        )
+        monkeypatch.setattr(run_mod, "_estimate_cost", lambda *args, **kwargs: True)
+        monkeypatch.setattr(run_mod, "_execute_run", lambda *args, **kwargs: None)
+
+        result = runner.invoke(app, ["quickstart"], input="2\nhello\nn\nn\ny\n")
+
+        assert result.exit_code == 0, result.output
+        assert "no longer valid" in reauth_called["warning"].lower()
+        assert "session verified" in result.output.lower()
+
+    def test_invalid_environment_credentials_stop_before_prompt(
+        self, runner: CliRunner, monkeypatch
+    ):
+        from teardrop import AuthenticationError
+
+        monkeypatch.setenv("TEARDROP_API_KEY", "stale-token")
+        mock_client = MagicMock()
+        mock_client.get_me = AsyncMock(side_effect=AuthenticationError("Unauthorized"))
+        mock_client.close = AsyncMock()
+        monkeypatch.setattr(config, "get_client", lambda base_url=None: mock_client)
+
+        result = runner.invoke(app, ["quickstart"], input="2\n")
+
+        assert result.exit_code == 0, result.output
+        assert "TEARDROP_API_KEY" in result.output
+        assert "Prompt" not in result.output
+
+    def test_estimate_failure_does_not_ask_to_run(self, runner: CliRunner, monkeypatch):
+        monkeypatch.setenv("TEARDROP_API_KEY", "fake-jwt")
+        from teardrop_cli.commands import run as run_mod
+
+        monkeypatch.setattr(run_mod, "_estimate_cost", lambda *args, **kwargs: False)
+        monkeypatch.setattr(
+            run_mod,
+            "_execute_run",
+            lambda *args, **kwargs: pytest.fail("run must not start after estimate failure"),
+        )
+
+        result = runner.invoke(app, ["quickstart"], input="2\nhello\nn\ny\n")
+
+        assert result.exit_code == 0, result.output
+        assert "No run started" in result.output
+        assert "Run this prompt now?" not in result.output

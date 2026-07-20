@@ -101,6 +101,26 @@ class TestSiweLogin:
         assert result.exit_code == 0, result.output
         assert stored["access_token"] == "jwt.siwe.ok"
 
+    def test_siwe_prompts_for_private_key(self, runner: CliRunner, monkeypatch):
+        from eth_account import Account
+
+        from teardrop_cli.commands.auth import _resolve_siwe_private_key
+
+        private_key = Account.create().key.hex()
+        prompted = {}
+        monkeypatch.setattr("teardrop_cli.commands.auth.sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr(
+            "teardrop_cli.commands.auth.typer.prompt",
+            lambda label, **kwargs: prompted.update(label=label, kwargs=kwargs) or private_key,
+        )
+
+        resolved, generated = _resolve_siwe_private_key(key_file=None, generate_wallet=False)
+
+        assert resolved == private_key
+        assert generated is False
+        assert prompted["label"] == "Ethereum private key"
+        assert prompted["kwargs"]["hide_input"] is True
+
     @pytest.mark.asyncio
     async def test_siwe_auth_uses_key_derived_address(self, monkeypatch):
         from eth_account import Account

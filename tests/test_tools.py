@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from click.testing import CliRunner
 
 from teardrop_cli.cli import app
@@ -106,6 +107,133 @@ class TestPause:
 
 
 class TestProbe:
+    def test_probe_from_file_uses_spec_without_client(
+        self, runner: CliRunner, monkeypatch, tmp_path
+    ):
+        import json
+
+        spec = {
+            "name": "local_tool",
+            "description": "A local tool",
+            "input_schema": {"type": "object", "properties": {}},
+            "webhook_url": "https://hook.example.com/local",
+            "webhook_method": "GET",
+            "auth_header_name": "X-Webhook-Secret",
+            "auth_header_value": "local-secret",
+        }
+        path = tmp_path / "tool.json"
+        path.write_text(json.dumps(spec), encoding="utf-8")
+        captured = {}
+
+        monkeypatch.setattr(
+            "teardrop_cli.config.get_client",
+            lambda *args, **kwargs: pytest.fail("local probe must not create an API client"),
+        )
+
+        class _Response:
+            status_code = 200
+
+        class _AsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def request(self, method, url, **kwargs):
+                captured.update(method=method, url=url, **kwargs)
+                return _Response()
+
+        monkeypatch.setattr("teardrop_cli.commands.tools.httpx.AsyncClient", _AsyncClient)
+
+        result = runner.invoke(app, ["tools", "probe", "--from-file", str(path)])
+
+        assert result.exit_code == 0, result.output
+        assert captured["method"] == "GET"
+        assert captured["url"] == spec["webhook_url"]
+        assert captured["params"] == {"_probe": True}
+        assert captured["headers"]["X-Webhook-Secret"] == "local-secret"
+        assert "local-secret" not in result.output
+
+    def test_probe_from_file_flags_override_spec(self, runner: CliRunner, monkeypatch, tmp_path):
+        import json
+
+        path = tmp_path / "tool.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "name": "local_tool",
+                    "description": "A local tool",
+                    "input_schema": {"type": "object", "properties": {}},
+                    "webhook_url": "https://hook.example.com/local",
+                    "webhook_method": "GET",
+                    "auth_header_name": "X-Configured",
+                    "auth_header_value": "configured-secret",
+                }
+            ),
+            encoding="utf-8",
+        )
+        captured = {}
+
+        class _Response:
+            status_code = 200
+
+        class _AsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def request(self, method, url, **kwargs):
+                captured.update(method=method, url=url, **kwargs)
+                return _Response()
+
+        monkeypatch.setattr("teardrop_cli.commands.tools.httpx.AsyncClient", _AsyncClient)
+
+        result = runner.invoke(
+            app,
+            [
+                "tools",
+                "probe",
+                "--from-file",
+                str(path),
+                "--method",
+                "POST",
+                "--auth-header-name",
+                "X-Override",
+                "--auth-header-value",
+                "override-secret",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert captured["method"] == "POST"
+        assert captured["json"] == {"_probe": True}
+        assert captured["headers"]["X-Override"] == "override-secret"
+        assert "X-Configured" not in captured["headers"]
+
+    def test_probe_from_file_rejects_invalid_spec(self, runner: CliRunner, monkeypatch, tmp_path):
+        import json
+
+        path = tmp_path / "tool.json"
+        path.write_text(json.dumps({"name": "missing_fields"}), encoding="utf-8")
+        monkeypatch.setattr(
+            "teardrop_cli.commands.tools.httpx.AsyncClient",
+            lambda *args, **kwargs: pytest.fail("invalid spec must not make an HTTP request"),
+        )
+
+        result = runner.invoke(app, ["tools", "probe", "--from-file", str(path)])
+
+        assert result.exit_code == 1
+        assert "Validation error" in result.output
+
     def test_probe_success(self, runner: CliRunner, patch_get_client, mock_client, monkeypatch):
         mock_client.list_tools.return_value = [_tool_obj()]
         mock_client.get_tool = AsyncMock(return_value=_tool_obj())
