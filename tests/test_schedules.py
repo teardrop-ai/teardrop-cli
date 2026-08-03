@@ -145,7 +145,11 @@ class TestCreate:
             ],
         )
         assert result.exit_code == 1
-        assert "as UTF-8" in result.output
+        # Rich may wrap the message at the terminal width, so normalize
+        # whitespace before asserting on the full phrase.
+        normalized = " ".join(result.output.split())
+        assert "Could not decode --prompt-file" in normalized
+        assert "as UTF-8" in normalized
         mock_client.schedules.create.assert_not_awaited()
 
 
