@@ -255,6 +255,8 @@ New email-authenticated organizations may receive optional promotional credit af
 teardrop marketplace list
 teardrop marketplace search "weather"
 teardrop marketplace info acme/weather
+teardrop marketplace reputation
+teardrop marketplace reputation acme/weather --json
 teardrop marketplace subscribe acme/weather
 teardrop marketplace subscriptions
 ```

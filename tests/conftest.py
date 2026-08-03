@@ -159,6 +159,37 @@ def mock_client():
             "next_cursor": None,
         }
     )
+    client.get_public_reputation = AsyncMock(
+        return_value=MagicMock(
+            model_dump=lambda: {
+                "schema_version": "1.0",
+                "generated_at": "2026-08-02T12:00:00Z",
+                "methodology_url": "https://teardrop.dev/reputation-methodology",
+                "tools": [
+                    {
+                        "qualified_tool_name": "acme/weather",
+                        "reputation_score": 0.91,
+                        "success_rate": 0.96,
+                        "sample_size": 125.0,
+                        "confidence": 0.88,
+                        "freshness": 0.97,
+                        "average_latency_ms": 142.5,
+                        "unique_caller_count": 18,
+                    },
+                    {
+                        "qualified_tool_name": "acme/search",
+                        "reputation_score": 0.84,
+                        "success_rate": 0.9,
+                        "sample_size": 80.0,
+                        "confidence": 0.75,
+                        "freshness": 0.92,
+                        "average_latency_ms": 210.0,
+                        "unique_caller_count": None,
+                    },
+                ],
+            }
+        )
+    )
     client.subscribe = AsyncMock(
         return_value=MagicMock(
             model_dump=lambda: {"id": "sub_1", "qualified_tool_name": "acme/weather"}

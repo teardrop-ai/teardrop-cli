@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -140,7 +141,8 @@ class TestSiweLogin:
                 return None
 
             async def get_siwe_nonce(self):
-                return {"nonce": "abc123"}
+                # Mirrors the real SDK: returns a SiweNonceResponse pydantic model.
+                return SimpleNamespace(nonce="abc123")
 
             async def authenticate_siwe(self, message, signature):
                 seen["message"] = message

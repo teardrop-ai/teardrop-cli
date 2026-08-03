@@ -462,7 +462,9 @@ async def _siwe_auth_async(
 
     async with AsyncTeardropClient(url) as client:
         nonce_resp = await client.get_siwe_nonce()
-        nonce = nonce_resp.get("nonce", nonce_resp.get("value", ""))
+        # get_siwe_nonce() returns a SiweNonceResponse pydantic model (nonce: str),
+        # not a dict — access the attribute directly.
+        nonce = nonce_resp.nonce
 
         from urllib.parse import urlparse
 

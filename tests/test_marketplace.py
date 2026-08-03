@@ -91,6 +91,55 @@ class TestInfo:
         assert result.exit_code == 1
 
 
+class TestReputation:
+    def test_reputation_table(self, runner: CliRunner, patch_get_client):
+        result = runner.invoke(app, ["marketplace", "reputation"])
+        assert result.exit_code == 0, result.output
+        assert "Public Tool Reputation" in result.output
+        assert "Schema: 1.0" in result.output
+        assert "acme/weather" in result.output
+        assert "0.91" in result.output
+        assert "142.5" in result.output
+        assert "acme/search" in result.output
+
+    def test_reputation_json(self, runner: CliRunner, patch_get_client):
+        import json
+
+        result = runner.invoke(app, ["marketplace", "reputation", "--json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["schema_version"] == "1.0"
+        assert data["methodology_url"].endswith("reputation-methodology")
+        assert len(data["tools"]) == 2
+        assert data["tools"][0]["unique_caller_count"] == 18
+        assert data["tools"][1]["unique_caller_count"] is None
+
+    def test_reputation_filters_by_qualified_name(self, runner: CliRunner, patch_get_client):
+        import json
+
+        result = runner.invoke(app, ["marketplace", "reputation", "acme/weather", "--json"])
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert [tool["qualified_tool_name"] for tool in data["tools"]] == ["acme/weather"]
+
+    def test_reputation_missing_tool(self, runner: CliRunner, patch_get_client):
+        result = runner.invoke(app, ["marketplace", "reputation", "nope/none"])
+        assert result.exit_code == 1
+        assert "No public reputation found" in result.output
+
+    def test_reputation_does_not_require_auth(self, runner: CliRunner, mock_client, monkeypatch):
+        calls = {}
+
+        def get_client(*args, **kwargs):
+            calls.update(kwargs)
+            return mock_client
+
+        monkeypatch.setattr("teardrop_cli.config.get_client", get_client)
+        result = runner.invoke(app, ["marketplace", "reputation"])
+        assert result.exit_code == 0, result.output
+        assert calls["require_auth"] is False
+
+
 class TestSubscribe:
     def test_subscribe_with_yes(self, runner: CliRunner, patch_get_client, mock_client):
         result = runner.invoke(app, ["marketplace", "subscribe", "acme/weather", "--yes"])

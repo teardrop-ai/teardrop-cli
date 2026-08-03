@@ -241,6 +241,80 @@ def info(
 
 
 # ---------------------------------------------------------------------------
+# reputation
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def reputation(
+    qualified_name: Annotated[
+        str | None,
+        typer.Argument(metavar="ORG/TOOL", help="Optional qualified tool name filter."),
+    ] = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
+    base_url: Annotated[str | None, typer.Option("--base-url", hidden=True)] = None,
+) -> None:
+    """Show public reputation metrics for marketplace tools (no auth required)."""
+    from teardrop_cli import config
+    from teardrop_cli.formatting import data_console, print_error, print_json, print_table, spinner
+
+    client = config.get_client(base_url, require_auth=False)
+
+    async def _fetch() -> dict:
+        try:
+            response = await client.get_public_reputation()
+            return response.model_dump() if hasattr(response, "model_dump") else dict(response)
+        finally:
+            await client.close()
+
+    with spinner("Fetching public reputation…"):
+        data = asyncio.run(_fetch())
+
+    tools = data.get("tools", [])
+    if qualified_name is not None:
+        tools = [tool for tool in tools if tool.get("qualified_tool_name") == qualified_name]
+        if not tools:
+            print_error(f"No public reputation found for {qualified_name!r}.")
+            raise typer.Exit(1)
+        data["tools"] = tools
+
+    if as_json:
+        print_json(data)
+        return
+
+    if not tools:
+        data_console.print("[dim]No public reputation data available.[/dim]")
+        return
+
+    data_console.print(
+        f"Schema: {data.get('schema_version', '—')}  |  "
+        f"Generated: {data.get('generated_at') or '—'}  |  "
+        f"Methodology: {data.get('methodology_url') or '—'}"
+    )
+
+    rows = [
+        [
+            tool.get("qualified_tool_name", "—"),
+            (
+                f"score={tool.get('reputation_score', '—')}  "
+                f"success={tool.get('success_rate', '—')}  "
+                f"sample={tool.get('sample_size', '—')}  "
+                f"confidence={tool.get('confidence', '—')}  "
+                f"freshness={tool.get('freshness', '—')}  "
+                f"latency_ms={tool.get('average_latency_ms', '—')}  "
+                f"callers={tool.get('unique_caller_count', '—')}"
+            ),
+        ]
+        for tool in tools
+    ]
+    print_table(
+        ["Tool", "Metrics"],
+        rows,
+        title="Public Tool Reputation",
+    )
+
+
+# ---------------------------------------------------------------------------
 # subscribe
 # ---------------------------------------------------------------------------
 

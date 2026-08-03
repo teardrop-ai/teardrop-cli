@@ -192,7 +192,7 @@ teardrop usage --json
 
 The CLI does not support direct top-ups. To add credits or manage your billing methods, please visit the dashboard:
 
-[https://teardrop.dev/billing](https://teardrop.dev/billing)
+[https://teardrop.dev](https://teardrop.dev)
 
 If you run out of credits during an agent run, the agent will pause and provide this link.
 
@@ -315,6 +315,8 @@ teardrop marketplace list
 teardrop marketplace list --category data --json
 teardrop marketplace search "weather"
 teardrop marketplace info acme/weather
+teardrop marketplace reputation
+teardrop marketplace reputation acme/weather --json
 teardrop marketplace subscribe acme/weather
 teardrop marketplace subscribe acme/weather --yes    # skip confirmation
 teardrop marketplace subscriptions
