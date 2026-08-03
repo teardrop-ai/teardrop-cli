@@ -70,6 +70,84 @@ class TestCreate:
         assert '"name": "hourly-sync"' in result.output
         assert '"schedule_kind": "interval"' in result.output
 
+    def test_create_prompt_file(self, runner, patch_get_client, mock_client, tmp_path):
+        prompt_file = tmp_path / "task.md"
+        prompt_file.write_text("Line one\nLine two 📊\n", encoding="utf-8")
+        mock_client.schedules.create.return_value = _schedule(name="from-file")
+        result = runner.invoke(
+            app,
+            [
+                "schedules",
+                "create",
+                "--name",
+                "from-file",
+                "--prompt-file",
+                str(prompt_file),
+                "--interval-seconds",
+                "60",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        request = mock_client.schedules.create.await_args.args[0]
+        assert request.prompt == "Line one\nLine two 📊\n"
+
+    def test_create_prompt_file_mutually_exclusive(self, runner, patch_get_client, mock_client):
+        result = runner.invoke(
+            app,
+            [
+                "schedules",
+                "create",
+                "--name",
+                "x",
+                "--prompt",
+                "inline",
+                "--prompt-file",
+                "somefile.md",
+                "--interval-seconds",
+                "60",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "not both" in result.output
+
+    def test_create_requires_prompt_source(self, runner, patch_get_client, mock_client):
+        result = runner.invoke(
+            app,
+            [
+                "schedules",
+                "create",
+                "--name",
+                "x",
+                "--interval-seconds",
+                "60",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "Provide either --prompt or --prompt-file" in result.output
+        mock_client.schedules.create.assert_not_awaited()
+
+    def test_create_prompt_file_rejects_invalid_utf8(
+        self, runner, patch_get_client, mock_client, tmp_path
+    ):
+        prompt_file = tmp_path / "invalid.bin"
+        prompt_file.write_bytes(b"\xff\xfe\xfd")
+        result = runner.invoke(
+            app,
+            [
+                "schedules",
+                "create",
+                "--name",
+                "x",
+                "--prompt-file",
+                str(prompt_file),
+                "--interval-seconds",
+                "60",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "as UTF-8" in result.output
+        mock_client.schedules.create.assert_not_awaited()
+
 
 class TestList:
     def test_list(self, runner: CliRunner, patch_get_client, mock_client):
@@ -90,6 +168,39 @@ class TestList:
         result = runner.invoke(app, ["schedules", "list", "--json"])
         assert result.exit_code == 0, result.output
         assert '"name": "nightly-report"' in result.output
+
+    def test_list_handles_sdk_list_response_model(
+        self, runner: CliRunner, patch_get_client, mock_client
+    ):
+        # The real SDK returns a ScheduledRunListResponse model with an
+        # ``items`` field (plus ``next_cursor``), not a plain list.
+        from teardrop.models import ScheduledRun, ScheduledRunListResponse
+
+        model = ScheduledRunListResponse(
+            items=[
+                ScheduledRun(
+                    **_schedule(
+                        name="model-backed",
+                        org_id="org_1",
+                        user_id="user_1",
+                    )
+                )
+            ],
+            next_cursor=None,
+        )
+        mock_client.schedules.list.return_value = model
+        result = runner.invoke(app, ["schedules", "list"])
+        assert result.exit_code == 0, result.output
+        assert "model-backed" in result.output
+
+    def test_list_handles_dict_response_envelope(self, runner, patch_get_client, mock_client):
+        mock_client.schedules.list.return_value = {
+            "items": [_schedule(name="dict-backed")],
+            "next_cursor": None,
+        }
+        result = runner.invoke(app, ["schedules", "list", "--json"])
+        assert result.exit_code == 0, result.output
+        assert '"name": "dict-backed"' in result.output
 
 
 class TestGet:

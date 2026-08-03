@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "teardrop-cli"
-version = "0.3.3"
+version = "0.3.4"
 description = "Command-line interface for the Teardrop AI agent platform"
 readme = "README.md"
 license = { file = "LICENSE" }

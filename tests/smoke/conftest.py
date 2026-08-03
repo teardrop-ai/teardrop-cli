@@ -62,6 +62,7 @@ def subprocess_cli(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess]
             capture_output=True,
             stdin=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
             env=env,
         )
 

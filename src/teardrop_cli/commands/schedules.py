@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Annotated, Any
 
 import typer
@@ -21,6 +23,32 @@ def _to_dict(value: Any) -> dict[str, Any]:
     if hasattr(value, "model_dump"):
         return value.model_dump()
     return dict(value)
+
+
+def _list_items(value: Any) -> Any:
+    if isinstance(value, dict):
+        return value.get("items") or []
+    items = getattr(value, "items", None)
+    if items is not None and not callable(items):
+        return items
+    return value
+
+
+def _read_prompt_file(path: str) -> str:
+    """Read prompt text from *path* (UTF-8), or stdin when *path* is ``-``."""
+    from teardrop_cli.formatting import print_error
+
+    try:
+        if path == "-":
+            return sys.stdin.read()
+        text = Path(path).read_text(encoding="utf-8-sig")
+        return text
+    except UnicodeError as exc:
+        print_error(f"Could not decode --prompt-file {path!r} as UTF-8: {exc}")
+        raise typer.Exit(1) from None
+    except OSError as exc:
+        print_error(f"Could not read --prompt-file {path!r}: {exc}")
+        raise typer.Exit(1) from None
 
 
 def _to_page_dict(value: Any) -> dict[str, Any]:
@@ -132,11 +160,22 @@ def _validate_callback_options(
 @app.command()
 def create(
     name: Annotated[str, typer.Option("--name", help="Schedule name.")],
-    prompt: Annotated[str, typer.Option("--prompt", help="Prompt to run.")],
     interval_seconds: Annotated[
         int,
         typer.Option("--interval-seconds", min=1, help="Run interval in seconds."),
     ],
+    prompt: Annotated[
+        str | None,
+        typer.Option("--prompt", help="Prompt to run. Mutually exclusive with --prompt-file."),
+    ] = None,
+    prompt_file: Annotated[
+        str | None,
+        typer.Option(
+            "--prompt-file",
+            help="Read the prompt from a UTF-8 file. Use '-' to read from stdin. "
+            "Mutually exclusive with --prompt.",
+        ),
+    ] = None,
     callback_url: Annotated[
         str | None,
         typer.Option("--callback-url", help="Optional callback URL invoked after each run."),
@@ -147,7 +186,16 @@ def create(
     """Create a new interval schedule."""
     from teardrop import CreateScheduleRequest
 
-    from teardrop_cli.formatting import print_json, print_success
+    from teardrop_cli.formatting import print_error, print_json, print_success
+
+    if prompt is not None and prompt_file is not None:
+        print_error("Use either --prompt or --prompt-file, not both.")
+        raise typer.Exit(1) from None
+    if prompt is None and prompt_file is None:
+        print_error("Provide either --prompt or --prompt-file.")
+        raise typer.Exit(1) from None
+    if prompt_file is not None:
+        prompt = _read_prompt_file(prompt_file)
 
     request = CreateScheduleRequest(
         name=name,
@@ -185,7 +233,10 @@ def list_cmd(
         operation=lambda client: client.schedules.list(),
     )
 
-    items = [_to_dict(item) for item in result]
+    # The SDK returns a ScheduledRunListResponse model with an ``items``
+    # field (plus ``next_cursor``). Iterating the model directly would yield
+    # its field tuples, so unwrap ``.items`` when present.
+    items = [_to_dict(item) for item in _list_items(result)]
     if as_json:
         print_json(items)
         return

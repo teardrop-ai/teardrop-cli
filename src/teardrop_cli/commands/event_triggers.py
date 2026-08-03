@@ -23,6 +23,15 @@ def _to_dict(value: Any) -> dict[str, Any]:
     return dict(value)
 
 
+def _list_items(value: Any) -> Any:
+    if isinstance(value, dict):
+        return value.get("items") or []
+    items = getattr(value, "items", None)
+    if items is not None and not callable(items):
+        return items
+    return value
+
+
 def _to_page_dict(value: Any) -> dict[str, Any]:
     data = _to_dict(value)
     data["items"] = [_to_dict(item) for item in data.get("items") or []]
@@ -223,7 +232,10 @@ def list_cmd(
         operation=lambda client: client.event_triggers.list(),
     )
 
-    items = [_to_dict(item) for item in result]
+    # The SDK returns an EventTriggerListResponse model with an ``items``
+    # field (plus ``next_cursor``). Iterating the model directly would yield
+    # its field tuples, so unwrap ``.items`` when present.
+    items = [_to_dict(item) for item in _list_items(result)]
     if as_json:
         print_json(items)
         return

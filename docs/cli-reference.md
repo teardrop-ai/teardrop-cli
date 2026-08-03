@@ -133,6 +133,13 @@ teardrop schedules create \
   --interval-seconds 3600 \
   --json
 
+# Read the prompt from a UTF-8 file (or '-' for stdin) instead of --prompt:
+teardrop schedules create \
+  --name hourly-briefing \
+  --prompt-file ./task.md \
+  --interval-seconds 3600 \
+  --json
+
 teardrop schedules list --json
 teardrop schedules get <schedule-id> --json
 teardrop schedules update <schedule-id> --enabled false --json
@@ -141,6 +148,8 @@ teardrop schedules runs <schedule-id> --limit 50 --json
 teardrop schedules delete <schedule-id>
 teardrop schedules delete <schedule-id> --yes
 ```
+
+Exactly one of `--prompt` or `--prompt-file` is required. `--prompt-file` reads UTF-8 (a leading BOM is stripped) and preserves newlines and emoji; pass `-` to read the prompt from stdin.
 
 Non-JSON list output includes: `ID`, `Name`, `Enabled`, `Interval`, `Consecutive Failures`, `Last Run At`.
 

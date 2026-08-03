@@ -8,9 +8,28 @@ modules are imported only when the subcommand is actually invoked, keeping
 
 from __future__ import annotations
 
+import sys
+from contextlib import suppress
+
 import click
 
 from teardrop_cli._lazy import LazyGroup
+
+
+def _force_utf8_stdio() -> None:
+    """Reconfigure stdout/stderr to UTF-8.
+
+    On legacy Windows consoles the default codec (e.g. cp1252) cannot encode
+    non-ASCII characters such as emoji in prompts or JSON output, raising
+    ``UnicodeEncodeError``. Forcing UTF-8 keeps ``--json`` and rich output
+    working regardless of the console code page.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        with suppress(AttributeError, ValueError):
+            stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+
+
+_force_utf8_stdio()
 
 
 @click.group(
