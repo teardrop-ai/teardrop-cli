@@ -99,6 +99,17 @@ def test_env_vars_still_highest_priority(mock_keyring, mock_load_config):
         del os.environ["TEARDROP_API_KEY"]
 
 
+def test_sync_client_uses_same_auth_precedence(mock_keyring, mock_load_config, clean_env):
+    os.environ["TEARDROP_API_KEY"] = "env-token"
+
+    with patch("teardrop.TeardropClient") as mock_client_cls:
+        config.get_sync_client()
+
+    mock_client_cls.assert_called_once()
+    _, kwargs = mock_client_cls.call_args
+    assert kwargs.get("token") == "env-token"
+
+
 class TestDetectCredentialSource:
     """Tests for config.detect_credential_source()."""
 

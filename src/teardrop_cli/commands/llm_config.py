@@ -17,12 +17,17 @@ app = typer.Typer(
 
 _SUPPORTED_PROVIDERS = ["anthropic", "openai", "google", "openrouter"]
 _SUPPORTED_ROUTINGS = ["default", "cost", "speed", "quality"]
+_SUPPORTED_REASONING_EFFORTS = ["none", "minimal", "low", "medium", "high"]
 
 
 def _mask_api_key(key: str) -> str:
     """Return first 6 chars of *key* followed by ``•••••``."""
     prefix = key[:6] if len(key) >= 6 else key
     return f"{prefix}•••••"
+
+
+def _display_optional(value: object) -> str:
+    return "(none)" if value is None else str(value)
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +88,8 @@ def get(
             ["Temperature", data.get("temperature", "—")],
             ["Timeout", f"{data.get('timeout_seconds', '—')}s"],
             ["Routing Preference", data.get("routing_preference", "—")],
+            ["Reasoning Effort", _display_optional(data.get("reasoning_effort"))],
+            ["Model Reasoning Effort", _display_optional(data.get("model_reasoning_effort"))],
             ["BYOK", "true" if data.get("is_byok") else "false"],
             ["Updated", data.get("updated_at", "—")],
         ],
@@ -118,6 +125,27 @@ def set_config(
     timeout_seconds: Annotated[
         int | None, typer.Option("--timeout-seconds", help="Timeout in seconds (≥1).")
     ] = None,
+    reasoning_effort: Annotated[
+        str | None,
+        typer.Option(
+            "--reasoning-effort",
+            help="Org-wide reasoning effort (none, minimal, low, medium, high).",
+        ),
+    ] = None,
+    model_reasoning_effort: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--model-reasoning-effort",
+            help="Per-model override as provider:model=effort; may be repeated.",
+        ),
+    ] = None,
+    clear_reasoning_effort: Annotated[
+        bool,
+        typer.Option(
+            "--clear-reasoning-effort",
+            help="Clear the org-wide reasoning effort.",
+        ),
+    ] = False,
     byok_key: Annotated[
         str | None,
         typer.Option("--byok-key", help="Bring-your-own API key. Pass '-' to read from stdin."),
@@ -169,6 +197,27 @@ def set_config(
     if timeout_seconds is not None and timeout_seconds < 1:
         print_error("timeout-seconds must be ≥ 1.")
         raise typer.Exit(1)
+    if reasoning_effort is not None and reasoning_effort not in _SUPPORTED_REASONING_EFFORTS:
+        print_error(
+            f"Invalid reasoning effort: {reasoning_effort!r}.",
+            hint=f"Supported: {', '.join(_SUPPORTED_REASONING_EFFORTS)}",
+        )
+        raise typer.Exit(1)
+    if clear_reasoning_effort and reasoning_effort is not None:
+        print_error("--clear-reasoning-effort cannot be combined with --reasoning-effort.")
+        raise typer.Exit(1)
+
+    model_reasoning_efforts: dict[str, str] = {}
+    for override in model_reasoning_effort or []:
+        provider_model, equals, effort = override.partition("=")
+        provider_name, colon, model_id = provider_model.partition(":")
+        if not equals or not colon or not provider_name or not model_id:
+            print_error(
+                f"Invalid model reasoning override: {override!r}.",
+                hint="Expected format: provider:model=effort.",
+            )
+            raise typer.Exit(1)
+        model_reasoning_efforts[f"{provider_name}:{model_id}"] = effort
 
     # BYOK key resolution
     resolved_key: str | None = None
@@ -215,13 +264,20 @@ def set_config(
         )
         raise typer.Exit(1)
 
+    kwargs = dict(merged)
+    if clear_key:
+        kwargs["api_key"] = None
+    elif resolved_key is not None:
+        kwargs["api_key"] = resolved_key
+    if clear_reasoning_effort:
+        kwargs["reasoning_effort"] = None
+    elif reasoning_effort is not None:
+        kwargs["reasoning_effort"] = reasoning_effort
+    if model_reasoning_efforts:
+        kwargs["model_reasoning_effort"] = model_reasoning_efforts
+
     async def _apply():
         try:
-            if clear_key:
-                return await client.set_llm_config(**merged)
-            kwargs = dict(merged)
-            if resolved_key is not None:
-                kwargs["api_key"] = resolved_key
             return await client.set_llm_config(**kwargs)
         finally:
             await client.close()
@@ -247,6 +303,8 @@ def set_config(
         ["Provider", data.get("provider", "—")],
         ["Model", data.get("model", "—")],
         ["Routing", data.get("routing_preference", "—")],
+        ["Reasoning Effort", _display_optional(data.get("reasoning_effort"))],
+        ["Model Reasoning Effort", _display_optional(data.get("model_reasoning_effort"))],
     ]
     if data.get("api_base"):
         summary_rows.append(["Self-Hosted URL", data["api_base"]])

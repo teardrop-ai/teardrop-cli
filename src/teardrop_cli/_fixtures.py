@@ -119,6 +119,8 @@ def make_llm_config(
     temperature: float = 0.0,
     timeout_seconds: int = 120,
     routing_preference: str = "default",
+    reasoning_effort: str | None = None,
+    model_reasoning_effort: dict[str, str] | None = None,
     is_byok: bool = False,
 ) -> MagicMock:
     """Return a minimal OrgLlmConfig-like mock."""
@@ -132,6 +134,8 @@ def make_llm_config(
         "temperature": temperature,
         "timeout_seconds": timeout_seconds,
         "routing_preference": routing_preference,
+        "reasoning_effort": reasoning_effort,
+        "model_reasoning_effort": model_reasoning_effort,
         "is_byok": is_byok,
         "created_at": "2026-04-16T10:00:00Z",
         "updated_at": "2026-04-16T10:00:00Z",

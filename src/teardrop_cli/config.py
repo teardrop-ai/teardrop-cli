@@ -17,8 +17,11 @@ import contextlib
 import os
 import stat
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
+
+_ClientT = TypeVar("_ClientT")
 
 # ---------------------------------------------------------------------------
 # Keyring service name
@@ -410,6 +413,65 @@ def detect_credential_source() -> str | None:
 # ---------------------------------------------------------------------------
 
 
+def _build_client(
+    client_class: Callable[..., _ClientT],
+    base_url: str | None,
+    *,
+    require_auth: bool,
+) -> _ClientT:
+    """Build an SDK client using the CLI's credential precedence."""
+    from teardrop_cli.formatting import print_error
+
+    url = base_url or get_base_url()
+
+    # 1. Static API key (TEARDROP_API_KEY preferred; TEARDROP_TOKEN legacy alias)
+    if token := (os.environ.get("TEARDROP_API_KEY") or os.environ.get("TEARDROP_TOKEN")):
+        return client_class(url, token=token)
+
+    # 2. Email + secret env vars
+    email_env = os.environ.get("TEARDROP_EMAIL")
+    secret_env = os.environ.get("TEARDROP_SECRET")
+    if email_env and secret_env:
+        return client_class(url, email=email_env, secret=secret_env)
+
+    # 3. Client credentials env vars
+    cid_env = os.environ.get("TEARDROP_CLIENT_ID")
+    csecret_env = os.environ.get("TEARDROP_CLIENT_SECRET")
+    if cid_env and csecret_env:
+        return client_class(url, client_id=cid_env, client_secret=csecret_env)
+
+    # 4. Stored email + secret (keyring)
+    if _keyring_available():
+        import keyring
+
+        email = keyring.get_password(_KEYRING_SERVICE, _KEYRING_EMAIL_KEY)
+        secret = keyring.get_password(_KEYRING_SERVICE, _KEYRING_SECRET_KEY)
+        if email and secret:
+            return client_class(url, email=email, secret=secret)
+
+        cid = keyring.get_password(_KEYRING_SERVICE, _KEYRING_CLIENT_ID_KEY)
+        csecret = keyring.get_password(_KEYRING_SERVICE, _KEYRING_CLIENT_SECRET_KEY)
+        if cid and csecret:
+            return client_class(url, client_id=cid, client_secret=csecret)
+
+    # 5. Stored access_token
+    cfg = load_config()
+    if token := cfg.get("access_token"):
+        return client_class(url, token=token)
+    # Legacy nested location
+    if token := cfg.get("auth", {}).get("token"):
+        return client_class(url, token=token)
+
+    if not require_auth:
+        return client_class(url)
+
+    print_error(
+        "Not authenticated.",
+        hint="Run [bold]teardrop auth login[/bold] to sign in, or [bold]teardrop auth signup[/bold] to create an account.",
+    )
+    raise SystemExit(1)
+
+
 def get_client(base_url: str | None = None, *, require_auth: bool = True):
     """Build and return an ``AsyncTeardropClient`` from stored credentials.
 
@@ -422,56 +484,14 @@ def get_client(base_url: str | None = None, *, require_auth: bool = True):
     """
     from teardrop import AsyncTeardropClient
 
-    from teardrop_cli.formatting import print_error
+    return _build_client(AsyncTeardropClient, base_url, require_auth=require_auth)
 
-    url = base_url or get_base_url()
 
-    # 1. Static API key (TEARDROP_API_KEY preferred; TEARDROP_TOKEN legacy alias)
-    if token := (os.environ.get("TEARDROP_API_KEY") or os.environ.get("TEARDROP_TOKEN")):
-        return AsyncTeardropClient(url, token=token)
+def get_sync_client(base_url: str | None = None, *, require_auth: bool = True):
+    """Build and return a synchronous ``TeardropClient`` from stored credentials."""
+    from teardrop import TeardropClient
 
-    # 2. Email + secret env vars
-    email_env = os.environ.get("TEARDROP_EMAIL")
-    secret_env = os.environ.get("TEARDROP_SECRET")
-    if email_env and secret_env:
-        return AsyncTeardropClient(url, email=email_env, secret=secret_env)
-
-    # 3. Client credentials env vars
-    cid_env = os.environ.get("TEARDROP_CLIENT_ID")
-    csecret_env = os.environ.get("TEARDROP_CLIENT_SECRET")
-    if cid_env and csecret_env:
-        return AsyncTeardropClient(url, client_id=cid_env, client_secret=csecret_env)
-
-    # 4. Stored email + secret (keyring)
-    if _keyring_available():
-        import keyring
-
-        email = keyring.get_password(_KEYRING_SERVICE, _KEYRING_EMAIL_KEY)
-        secret = keyring.get_password(_KEYRING_SERVICE, _KEYRING_SECRET_KEY)
-        if email and secret:
-            return AsyncTeardropClient(url, email=email, secret=secret)
-
-        cid = keyring.get_password(_KEYRING_SERVICE, _KEYRING_CLIENT_ID_KEY)
-        csecret = keyring.get_password(_KEYRING_SERVICE, _KEYRING_CLIENT_SECRET_KEY)
-        if cid and csecret:
-            return AsyncTeardropClient(url, client_id=cid, client_secret=csecret)
-
-    # 5. Stored access_token
-    cfg = load_config()
-    if token := cfg.get("access_token"):
-        return AsyncTeardropClient(url, token=token)
-    # Legacy nested location
-    if token := cfg.get("auth", {}).get("token"):
-        return AsyncTeardropClient(url, token=token)
-
-    if not require_auth:
-        return AsyncTeardropClient(url)
-
-    print_error(
-        "Not authenticated.",
-        hint="Run [bold]teardrop auth login[/bold] to sign in, or [bold]teardrop auth signup[/bold] to create an account.",
-    )
-    raise SystemExit(1)
+    return _build_client(TeardropClient, base_url, require_auth=require_auth)
 
 
 def extract_session_tokens(client) -> tuple[str | None, str | None]:

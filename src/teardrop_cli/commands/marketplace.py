@@ -8,11 +8,14 @@ from typing import Annotated
 
 import typer
 
+from teardrop_cli.commands.agent_registration import app as agent_registration_app
+
 app = typer.Typer(
     name="marketplace",
     help="Marketplace — browse and subscribe to published tools.",
     no_args_is_help=True,
 )
+app.add_typer(agent_registration_app, name="agent-registration")
 
 
 def _cost_dollars(atomic: int | None) -> str:

@@ -14,6 +14,7 @@ This document covers every flag, env var, and subcommand. For the quick path, st
 - [Billing & Credits](#billing--credits)
 - [Tool Management](#tool-management)
 - [Marketplace](#marketplace)
+- [Scorecards](#scorecards)
 - [Earnings & Withdrawals](#earnings--withdrawals)
 - [LLM Configuration](#llm-configuration)
 - [MCP Servers](#mcp-servers)
@@ -330,9 +331,43 @@ teardrop marketplace subscribe acme/weather
 teardrop marketplace subscribe acme/weather --yes    # skip confirmation
 teardrop marketplace subscriptions
 teardrop marketplace unsubscribe acme/weather
+teardrop marketplace agent-registration preview --agent-url https://agent.example/a2a
+teardrop marketplace agent-registration preview --agent-url https://agent.example/a2a --json
+teardrop marketplace agent-registration test --agent-url https://agent.example/a2a
 ```
 
 Browsing requires no authentication.
+
+Agent registration checks require authentication and use the authenticated organization.
+`preview` fetches a fresh agent card and applies the registration validation without writing
+registration data. Its response includes `registrable`, `detail` (null when registrable), and
+`price_per_task_usdc` when present.
+
+`test` sends one real message to the agent, but it is unpaid and unbilled; nothing is signed or
+settled. A priced agent is expected to return HTTP 402, which is not a charge to the CLI user.
+Both commands support `--json` for the complete typed SDK response, and false `registrable` or
+`passed` results are shown as results rather than transport errors.
+
+---
+
+## Scorecards
+
+Scorecard tasks, leaderboards, and subject results are public and read-only; no
+authentication is required. Leaderboard and subject queries default to a
+90-day window. `--json` returns the complete SDK response, including prediction
+schemas, task configuration, calibration, and any `null` metrics.
+
+```bash
+teardrop scorecards tasks
+teardrop scorecards tasks --json
+teardrop scorecards leaderboard <definition-key> <version>
+teardrop scorecards leaderboard <definition-key> <version> --window-days 30 --json
+teardrop scorecards show <definition-key> <version> <subject>
+```
+
+The tables show eligibility, sample count, coverage, adjusted Brier, and
+accuracy. Lower adjusted Brier is better. Unavailable values remain labeled as
+unavailable rather than being shown as zero.
 
 ---
 
@@ -384,6 +419,12 @@ teardrop llm-config set \
 **Routing:** `default` · `cost` · `speed` · `quality`
 **Validation:** temperature 0.0–2.0 · max tokens 1–200,000 · timeout ≥ 1 s
 
+**Reasoning:** `--reasoning-effort` sets the org-wide default (`none`, `minimal`,
+`low`, `medium`, or `high`). Repeat `--model-reasoning-effort
+provider:model=effort` for per-model overrides; these take precedence. Use
+`--clear-reasoning-effort` to send an explicit null. If either setting is
+omitted, it is left out of the update. `llm-config get` displays both settings.
+
 ### Bring-your-own-key (BYOK)
 
 ```bash
@@ -402,6 +443,9 @@ teardrop llm-config set --provider anthropic --model claude-sonnet-4-6 --clear-k
 ```
 
 BYOK keys are encrypted by the platform and used only for the configured provider/model. Teardrop still charges the orchestration fee through credits or x402; it does not charge Teardrop for the provider's model usage.
+
+`--clear-key` explicitly clears the stored BYOK key. Omitting both key flags
+preserves the existing key.
 
 ---
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from click.testing import CliRunner
 
@@ -17,6 +18,48 @@ from click.testing import CliRunner
 def runner() -> CliRunner:
     """Click CliRunner for invoking the CLI in tests."""
     return CliRunner()
+
+
+@pytest.fixture()
+def sdk_http(monkeypatch: pytest.MonkeyPatch):
+    """Use the real SDK with an in-memory HTTP transport."""
+    async_client = httpx.AsyncClient
+    handler = MagicMock(name="http_handler")
+
+    def make_client(*args, **kwargs):
+        return async_client(*args, **kwargs, transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr(httpx, "AsyncClient", make_client)
+    return handler
+
+
+@pytest.fixture(
+    params=[
+        "malformed_json",
+        "invalid_schema",
+        "unauthorized",
+        "server_error",
+        "connection",
+        "timeout",
+    ]
+)
+def sdk_http_failure(request, sdk_http):
+    if request.param == "connection":
+        sdk_http.side_effect = lambda req: _raise_http_error(httpx.ConnectError, req)
+    elif request.param == "timeout":
+        sdk_http.side_effect = lambda req: _raise_http_error(httpx.ReadTimeout, req)
+    elif request.param == "malformed_json":
+        sdk_http.return_value = httpx.Response(200, text="not json")
+    else:
+        status = {"invalid_schema": 200, "unauthorized": 401, "server_error": 500}[request.param]
+        sdk_http.return_value = httpx.Response(
+            status, json={"detail": "Invalid upstream response"}
+        )
+    return sdk_http
+
+
+def _raise_http_error(error_type, request):
+    raise error_type("Upstream request failed", request=request)
 
 
 # ---------------------------------------------------------------------------

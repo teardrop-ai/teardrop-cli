@@ -43,6 +43,7 @@ _force_utf8_stdio()
         "config": "teardrop_cli.commands.config_cmd:app",
         "run": "teardrop_cli.commands.run:app",
         "schedules": "teardrop_cli.commands.schedules:app",
+        "scorecards": "teardrop_cli.commands.scorecards:app",
         "balance": "teardrop_cli.commands.balance:app",
         "usage": "teardrop_cli.commands.usage:app",
         "agent-tools": "teardrop_cli.commands.agent_tools:app",

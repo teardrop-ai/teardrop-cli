@@ -259,9 +259,15 @@ teardrop marketplace reputation
 teardrop marketplace reputation acme/weather --json
 teardrop marketplace subscribe acme/weather
 teardrop marketplace subscriptions
+teardrop marketplace agent-registration preview --agent-url https://agent.example/a2a
+teardrop marketplace agent-registration test --agent-url https://agent.example/a2a
 ```
 
 Browsing requires no authentication. Subscribed tools become immediately available to your agents.
+Agent registration checks require authentication: `preview` validates a fresh agent card without
+writing registration data, while `test` sends one real but unpaid and unbilled message. Nothing is
+signed or settled; a priced agent's expected HTTP 402 is not a charge to you. Add `--json` to either
+command for the complete SDK response.
 
 ---
 
