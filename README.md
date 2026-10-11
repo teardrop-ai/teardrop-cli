@@ -22,6 +22,10 @@ teardrop --version
 
 Requires Python ≥ 3.11.
 
+Typer is constrained to versions below 0.26 because the CLI's lazy Click root
+loads Typer subcommands. Typer 0.26+ vendors Click and no longer supports this
+integration; mixing the two breaks error handling and exit codes.
+
 ---
 
 ## 60-Second Quickstart
